@@ -16,6 +16,7 @@ use crate::parse_benchmark::input::log::{
     Log, LogNode, LogStatus, NodeEnd, NodeEndKind, Ts,
     zkvm::zisk::{
         coordinator::RawJob,
+        pipeline::JobPipelines,
         worker::{AggBounds, JobStages, WorkerStages},
     },
 };
@@ -29,7 +30,12 @@ const AGGREGATE: usize = 4;
 const PHASE_COUNT: usize = 5;
 
 /// Builds the generic log for one parsed zisk job.
-pub fn build_log(raw: &RawJob, agg: Option<&AggBounds>, stages: Option<&JobStages>) -> Log {
+pub fn build_log(
+    raw: &RawJob,
+    agg: Option<&AggBounds>,
+    stages: Option<&JobStages>,
+    items: Option<&JobPipelines>,
+) -> Log {
     let mut meta = BTreeMap::new();
     if let Some(v) = raw.input_bytes {
         meta.insert("input_size".to_string(), v.into());
@@ -48,7 +54,7 @@ pub fn build_log(raw: &RawJob, agg: Option<&AggBounds>, stages: Option<&JobStage
         t_end: raw.t_end,
         duration_s: raw.duration_s,
         meta,
-        nodes: build_nodes(raw, agg, stages),
+        nodes: build_nodes(raw, agg, stages, items),
         participants: participants(raw, stages),
     }
 }
@@ -73,8 +79,14 @@ fn participants(raw: &RawJob, stages: Option<&JobStages>) -> Vec<String> {
 /// Builds per-node records from the worker sub-phase markers, the aggregator additionally carrying
 /// the cluster aggregate window. A clean job does not clip its windows, while an incomplete one
 /// clips its unfinished phase to the node's crash or cancel moment, the job's terminal time, or its
-/// last marker. A node with no window and no end marker is dropped.
-fn build_nodes(raw: &RawJob, agg: Option<&AggBounds>, stages: Option<&JobStages>) -> Vec<LogNode> {
+/// last marker. The fine pipeline items pass through unclipped, a dangling item keeping its open
+/// end. A node with no window, no items, and no end marker is dropped.
+fn build_nodes(
+    raw: &RawJob,
+    agg: Option<&AggBounds>,
+    stages: Option<&JobStages>,
+    items: Option<&JobPipelines>,
+) -> Vec<LogNode> {
     let aggregate = aggregate_window(raw, agg);
     let clean = raw.status == LogStatus::Success;
 
@@ -88,6 +100,9 @@ fn build_nodes(raw: &RawJob, agg: Option<&AggBounds>, stages: Option<&JobStages>
 
     let mut ids: BTreeSet<&str> = BTreeSet::new();
     if let Some(map) = stages {
+        ids.extend(map.keys().map(String::as_str));
+    }
+    if let Some(map) = items {
         ids.extend(map.keys().map(String::as_str));
     }
     ids.extend(raw.p1.iter().map(String::as_str));
@@ -123,12 +138,14 @@ fn build_nodes(raw: &RawJob, agg: Option<&AggBounds>, stages: Option<&JobStages>
             let job_start = raw.t_start.map(Ts::epoch_ms);
             let phases =
                 stage_windows(stage, cap, job_start, is_agg.then_some(aggregate).flatten());
-            if phases.iter().all(Option::is_none) && end.is_none() {
+            let node_items = items.and_then(|m| m.get(id)).cloned().unwrap_or_default();
+            if phases.iter().all(Option::is_none) && end.is_none() && node_items.is_empty() {
                 return None;
             }
             Some(LogNode {
                 id: id.to_string(),
                 phases,
+                items: node_items,
                 end,
             })
         })

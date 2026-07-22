@@ -1,8 +1,9 @@
-//! The zisk zkVM backend, with detection and the coordinator, worker, and phase parsers that turn
-//! its cluster logs into the generic log model.
+//! The zisk zkVM backend, with detection and the coordinator, worker, phase, and pipeline parsers
+//! that turn its cluster logs into the generic log model.
 
 pub mod coordinator;
 pub mod phases;
+pub mod pipeline;
 pub mod worker;
 
 use std::path::Path;
@@ -60,16 +61,22 @@ impl ZkvmParser for ZiskParser {
         let logs = raw_jobs
             .iter()
             .map(|raw| {
-                // The agg and stage maps both key on the eight-hex job prefix, so the coordinator
-                // id is normalized once and used for both lookups.
+                // The agg, stage, and pipeline maps all key on the eight-hex job prefix, so the
+                // coordinator id is normalized once and used for every lookup.
                 let key = job_prefix(&raw.id);
-                phases::build_log(raw, worker.agg.get(&key), worker.stages.get(&key))
+                phases::build_log(
+                    raw,
+                    worker.agg.get(&key),
+                    worker.stages.get(&key),
+                    worker.pipelines.get(&key),
+                )
             })
             .collect();
 
         Ok(ParsedLogs {
             name: "zisk",
             phases: zisk_phases(),
+            pipeline: pipeline::zisk_pipeline(),
             logs,
         })
     }

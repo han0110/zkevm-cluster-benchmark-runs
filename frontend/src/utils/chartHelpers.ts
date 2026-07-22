@@ -54,6 +54,17 @@ export const sliderDataZoom = (c: ThemeColors, start = 0, end = 100, minValueSpa
   ];
 };
 
+// Slider-only zoom for a chart living inside a scrollable container, whose plain wheel must keep
+// scrolling that container. An inside wheel zoom stops wheel events from ever bubbling out of the
+// canvas, so the slider is the only zoom control here. minSpan floors the window in percent so the
+// handles never collapse to a zero-width extent.
+export const sliderOnlyDataZoom = (c: ThemeColors, start = 0, end = 100, height = 16, bottom = 6) => {
+  const [s, e] = ordered(start, end);
+  return [
+    { ...styledSlider(c, height, bottom), filterMode: 'none' as const, minSpan: 1, throttle: ZOOM_THROTTLE, start: s, end: e },
+  ];
+};
+
 // Zoom config for a stack of connected telemetry charts. Every chart carries the same inside and slider
 // component ids so echarts.connect, which routes a dataZoom action by component id, broadcasts a drag
 // from any panel to every other. start/end percent survive a notMerge update, optional minValueSpan
@@ -75,8 +86,13 @@ export function parseDataZoom(p: unknown): { start: number; end: number } | null
   return typeof z.start === 'number' && typeof z.end === 'number' ? { start: z.start, end: z.end } : null;
 }
 
+// Dash style for the trace-cursor family, the dashed vertical reference lines marking a moment on the
+// block trace's time axis, the hovered-log cursor and the crash and cancel markers.
+export const TRACE_CURSOR_DASH_WIDTH = 2;
+export const TRACE_CURSOR_DASH_ARRAY: [number, number] = [6, 4];
+
 // Apply an alpha channel to a 6-digit hex color, producing the 8-digit form ECharts accepts.
-function hexA(hex: string, alpha: number): string {
+export function hexA(hex: string, alpha: number): string {
   const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
     .toString(16)
     .padStart(2, '0');

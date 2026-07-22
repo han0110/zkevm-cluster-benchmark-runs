@@ -52,6 +52,11 @@ pub struct Zkvm {
     pub name: String,
     pub version: String,
     pub phases: Vec<Phase>,
+    /// The ordered fine-pipeline item kinds, referenced positionally by each block node's pipeline
+    /// rows. Empty when the backend declares none, and omitted from the wire so older documents
+    /// round-trip unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pipeline: Vec<PipelineStep>,
 }
 
 /// The guest program that was proven.
@@ -66,6 +71,17 @@ pub struct Guest {
 pub struct Phase {
     pub name: String,
     pub label: String,
+}
+
+/// One fine-pipeline item kind. A paired kind may carry a witness segment and a compute segment in
+/// one row, while an unpaired kind is a single segment.
+#[derive(Serialize, Deserialize, PartialEq)]
+pub struct PipelineStep {
+    pub name: String,
+    pub label: String,
+    /// The owning phase name from the zkVM phase preset, the row's color source.
+    pub phase: String,
+    pub paired: bool,
 }
 
 /// One execution of the benchmark with its own statistics, blocks, and telemetry. The block,
@@ -122,6 +138,15 @@ pub struct PhaseWindow {
 #[derive(Serialize, Deserialize)]
 pub struct BlockNode {
     pub phases: Vec<Option<PhaseWindow>>,
+    /// Fine pipeline items of this node as variable-arity integer rows [kind, s, d, s2, d2] with
+    /// trailing fields absent, times in milliseconds from the block start. Arity 3 is one complete
+    /// segment, arity 5 a witness and compute pair, and arities 2 and 4 leave the last segment
+    /// dangling where a crash cut it off. A paired kind whose witness completed with no compute
+    /// left to claim it, because none opened before a crash or its compute closed before the
+    /// witness did, also serializes as arity 3, indistinguishable from a compute-only row. Rows
+    /// sort by start then kind, and the field is omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pipeline: Vec<Vec<i64>>,
     pub crashed_ms: Option<i64>,
     /// How this node ended on a crashed block, "crashed" for the lost node or "cancelled" for a
     /// sibling-stopped one. Null when the node has no crash marker.
@@ -191,4 +216,25 @@ pub struct NodeTelemetry {
 pub struct Telemetry {
     pub metrics: Vec<Metric>,
     pub nodes: Vec<NodeTelemetry>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parse_benchmark::output::schema::{BlockNode, Zkvm};
+
+    #[test]
+    fn a_zkvm_without_a_pipeline_template_round_trips_unchanged() {
+        let wire = r#"{"name":"zisk","version":"v1","phases":[]}"#;
+        let zkvm: Zkvm = serde_json::from_str(wire).unwrap();
+        assert!(zkvm.pipeline.is_empty());
+        assert_eq!(serde_json::to_string(&zkvm).unwrap(), wire);
+    }
+
+    #[test]
+    fn a_node_without_pipeline_rows_round_trips_unchanged() {
+        let wire = r#"{"phases":[null],"crashed_ms":null,"crash_kind":null,"participated":true}"#;
+        let node: BlockNode = serde_json::from_str(wire).unwrap();
+        assert!(node.pipeline.is_empty());
+        assert_eq!(serde_json::to_string(&node).unwrap(), wire);
+    }
 }

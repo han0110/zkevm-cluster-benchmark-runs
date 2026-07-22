@@ -14,7 +14,7 @@ import type {
 } from 'echarts';
 import { EChart } from '@/components/charts/EChart';
 import { ColorDot } from '@/components/common/ColorDot';
-import { namedAxis, type AxisTooltipParam } from '@/utils/chartHelpers';
+import { namedAxis, TRACE_CURSOR_DASH_ARRAY, TRACE_CURSOR_DASH_WIDTH, type AxisTooltipParam } from '@/utils/chartHelpers';
 import { contrastText } from '@/utils/color';
 
 export interface BarSegment {
@@ -49,11 +49,6 @@ export interface BarMarker {
 // Segments narrower than this share of the axis print no label because the bar cannot hold one without
 // overlapping. The exact value stays in the hover tooltip.
 const LABEL_MIN_FRACTION = 0.05;
-
-// Shared dash style for every vertical reference line on the trace, the hovered-log cursor and the
-// crash and cancel markers, so they read as one family with only their color setting them apart.
-const DASH_WIDTH = 2;
-const DASH_ARRAY: [number, number] = [6, 4];
 
 interface Datum {
   value: number;
@@ -177,7 +172,7 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
                   {
                     type: 'line',
                     shape: { x1: x, y1: y - barHalf, x2: x, y2: y + barHalf },
-                    style: { stroke: marker.color, lineWidth: DASH_WIDTH, lineDash: DASH_ARRAY },
+                    style: { stroke: marker.color, lineWidth: TRACE_CURSOR_DASH_WIDTH, lineDash: TRACE_CURSOR_DASH_ARRAY },
                   },
                   {
                     type: 'text',
@@ -277,7 +272,7 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
                     {
                       type: 'line',
                       shape: { x1: x, y1: grid.y, x2: x, y2: bottom },
-                      style: { stroke: '#f5f5f5', lineWidth: DASH_WIDTH, lineDash: DASH_ARRAY },
+                      style: { stroke: '#f5f5f5', lineWidth: TRACE_CURSOR_DASH_WIDTH, lineDash: TRACE_CURSOR_DASH_ARRAY },
                     },
                     {
                       type: 'rect',

@@ -127,6 +127,8 @@ pub struct NodeEnd {
 pub struct LogNode {
     pub id: String,
     pub phases: Vec<Option<(i64, i64)>>,
+    /// The node's fine pipeline items in template kind terms, empty when the backend extracts none.
+    pub items: Vec<PipelineItem>,
     pub end: Option<NodeEnd>,
 }
 
@@ -135,6 +137,26 @@ pub struct LogNode {
 pub struct PhaseDef {
     pub name: String,
     pub label: String,
+}
+
+/// One fine-pipeline item kind in a zkVM's ordered template, owned by the named preset phase. A
+/// paired kind carries a witness segment and a compute segment in one item.
+#[derive(Clone)]
+pub struct PipelineDef {
+    pub name: String,
+    pub label: String,
+    pub phase: String,
+    pub paired: bool,
+}
+
+/// One fine pipeline item on a node, in absolute epoch milliseconds. The first segment is the
+/// witness of a paired kind or the sole segment of an unpaired one, and the second is the compute
+/// half of a pair. A None end marks a segment a crash left open.
+#[derive(Clone, Copy)]
+pub struct PipelineItem {
+    pub kind: usize,
+    pub first: (i64, Option<i64>),
+    pub second: Option<(i64, Option<i64>)>,
 }
 
 /// The leading hex run of a token, the canonical key the coordinator's truncated job id, a crash

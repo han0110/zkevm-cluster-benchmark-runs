@@ -16,6 +16,11 @@
         { "name": "commit", "label": "Witgen + Commit" },
         { "name": "prove", "label": "Prove + Recurse" },
         { "name": "aggregate", "label": "Aggregate" }
+      ],
+      "pipeline": [
+        { "name": "chunk", "label": "Chunk", "phase": "emulation", "paired": false },
+        { "name": "instance", "label": "Instance", "phase": "prove", "paired": true },
+        { "name": "aggregation", "label": "Aggregation", "phase": "aggregate", "paired": false }
       ]
     },
     "guest": { "name": "reth", "version": "v2.1.0" }
@@ -54,9 +59,9 @@
           "verification_time_ms": 5,
           "meta": { "input_size": 1000000, "instances": 100, "steps": 100000000 },
           "nodes": [
-            { "phases": [{ "start_ms": 0, "dur_ms": 50 }, { "start_ms": 50, "dur_ms": 1000 }, { "start_ms": 1050, "dur_ms": 1500 }, { "start_ms": 2550, "dur_ms": 2000 }, null], "crashed_ms": null, "crash_kind": null, "participated": true },
-            { "phases": [{ "start_ms": 0, "dur_ms": 50 }, { "start_ms": 50, "dur_ms": 1000 }, { "start_ms": 1050, "dur_ms": 1500 }, { "start_ms": 2550, "dur_ms": 2000 }, null], "crashed_ms": null, "crash_kind": null, "participated": true },
-            { "phases": [{ "start_ms": 0, "dur_ms": 50 }, { "start_ms": 50, "dur_ms": 1000 }, { "start_ms": 1050, "dur_ms": 1500 }, { "start_ms": 2550, "dur_ms": 2000 }, { "start_ms": 4550, "dur_ms": 400 }], "crashed_ms": null, "crash_kind": null, "participated": true }
+            { "phases": [{ "start_ms": 0, "dur_ms": 50 }, { "start_ms": 50, "dur_ms": 1000 }, { "start_ms": 1050, "dur_ms": 1500 }, { "start_ms": 2550, "dur_ms": 2000 }, null], "pipeline": [[0, 50, 500], [1, 1050, 700, 2550, 1200]], "crashed_ms": null, "crash_kind": null, "participated": true },
+            { "phases": [{ "start_ms": 0, "dur_ms": 50 }, { "start_ms": 50, "dur_ms": 1000 }, { "start_ms": 1050, "dur_ms": 1500 }, { "start_ms": 2550, "dur_ms": 2000 }, null], "pipeline": [[0, 60, 480], [1, 1100, 650, 2600, 1100]], "crashed_ms": null, "crash_kind": null, "participated": true },
+            { "phases": [{ "start_ms": 0, "dur_ms": 50 }, { "start_ms": 50, "dur_ms": 1000 }, { "start_ms": 1050, "dur_ms": 1500 }, { "start_ms": 2550, "dur_ms": 2000 }, { "start_ms": 4550, "dur_ms": 400 }], "pipeline": [[0, 55, 490], [1, 1080, 660, 2570, 1150], [2, 4550, 400]], "crashed_ms": null, "crash_kind": null, "participated": true }
           ]
         },
         {

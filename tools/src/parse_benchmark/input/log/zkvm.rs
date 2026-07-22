@@ -8,14 +8,16 @@ use std::{borrow::Cow, path::Path, sync::LazyLock};
 
 use regex::Regex;
 
-use crate::parse_benchmark::input::log::{Log, PhaseDef};
+use crate::parse_benchmark::input::log::{Log, PhaseDef, PipelineDef};
 
 /// The result of parsing a run's cluster logs, holding the zkVM's wire name, its ordered phase
-/// preset, and one parsed log per proving job. The name is the lowercase identity the backend
-/// reports, emitted verbatim so the framework never enumerates the known zkVMs itself.
+/// preset, its fine-pipeline template, and one parsed log per proving job. The name is the
+/// lowercase identity the backend reports, emitted verbatim so the framework never enumerates the
+/// known zkVMs itself.
 pub struct ParsedLogs {
     pub name: &'static str,
     pub phases: Vec<PhaseDef>,
+    pub pipeline: Vec<PipelineDef>,
     pub logs: Vec<Log>,
 }
 

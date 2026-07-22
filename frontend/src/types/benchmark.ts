@@ -27,11 +27,23 @@ export interface Phase {
   label: string;
 }
 
+// One fine-pipeline item kind, `phase` the owning phase-preset name that colors it. A paired kind
+// carries a witness and a compute segment in one row, an unpaired kind a single segment.
+export interface PipelineStep {
+  name: string;
+  label: string;
+  phase: string;
+  paired: boolean;
+}
+
 // The zkVM that produced the proofs, carrying its ordered phase preset.
 export interface Zkvm {
   name: string;
   version: string;
   phases: Phase[];
+  // Fine-pipeline kind template in wire order, indexed by BlockNode.pipeline rows. Absent on a
+  // document generated before the pipeline was captured.
+  pipeline?: PipelineStep[];
 }
 
 // The guest program that was proven.
@@ -89,6 +101,12 @@ export interface PhaseWindow {
 // `crashed_ms` is the block-start offset where this node was blamed for a crash, null otherwise.
 export interface BlockNode {
   phases: (PhaseWindow | null)[];
+  // Fine-pipeline items as variable-arity rows [kind, s, d, s2, d2] with trailing fields absent, times
+  // in ms from the block start and `kind` indexing Software.zkvm.pipeline. Arity 3 is one complete
+  // segment, arity 5 a witness and compute pair, and arities 2 and 4 leave the last segment dangling
+  // where a crash cut it off. Rows sort by start then kind, and the field is absent when the node
+  // recorded none.
+  pipeline?: number[][];
   crashed_ms: number | null;
   // How this node ended a crashed block, 'crashed' for the lost node and 'cancelled' for one stopped
   // after a sibling crashed. Null when unmarked.

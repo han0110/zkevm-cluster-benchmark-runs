@@ -173,7 +173,9 @@ mod tests {
         sync::atomic::{AtomicU32, Ordering},
     };
 
-    use crate::parse_benchmark::{merge_run, parse_to_benchmark};
+    use crate::parse_benchmark::{
+        ParseError, merge_run, output::schema::PipelineStep, parse_to_benchmark,
+    };
 
     /// The committed fixture run directory, the only run data a unit test may lean on.
     fn fixture_dir() -> PathBuf {
@@ -217,5 +219,21 @@ mod tests {
         let added = merge_run(&mut existing, second).expect("same-benchmark runs merge");
         assert_eq!(added, existing.runs[0].blocks.len());
         assert_eq!(existing.runs.len(), 2, "the document holds both runs");
+    }
+
+    #[test]
+    fn patch_refuses_a_pipeline_template_mismatch() {
+        // Two runs of one benchmark whose zkVM pipeline templates differ must not merge, since the
+        // per-block kind indices of one run would point at the other's template.
+        let mut existing = parse_to_benchmark(&timestamped_run("20260602-000003")).unwrap();
+        let mut incoming = parse_to_benchmark(&timestamped_run("20260602-000004")).unwrap();
+        incoming.software.zkvm.pipeline.push(PipelineStep {
+            name: "extra".to_string(),
+            label: "Extra".to_string(),
+            phase: "prove".to_string(),
+            paired: false,
+        });
+        let err = merge_run(&mut existing, incoming).unwrap_err();
+        assert!(matches!(err, ParseError::PatchMismatch("software")));
     }
 }

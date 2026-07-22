@@ -8,12 +8,12 @@ use crate::parse_benchmark::{
     input::{
         Sources,
         dmon::DmonRow,
-        log::{Log, LogStatus, Ts, job_prefix, lines::RawLine, zkvm::ParsedLogs},
+        log::{Log, LogStatus, PipelineItem, Ts, job_prefix, lines::RawLine, zkvm::ParsedLogs},
         metrics::{MetricBlock, MetricStatus},
     },
     output::schema::{
         Benchmark, Block, BlockNode, Guest, Hardware, LogEntry, Metric, NodeStats, NodeTelemetry,
-        Phase, PhaseWindow, Run, Software, Statistics, Telemetry, Zkvm,
+        Phase, PhaseWindow, PipelineStep, Run, Software, Statistics, Telemetry, Zkvm,
     },
 };
 
@@ -128,6 +128,7 @@ pub fn assemble(
     let ParsedLogs {
         name: zkvm_name,
         phases,
+        pipeline,
         logs,
     } = parsed;
     let Sources {
@@ -199,6 +200,15 @@ pub fn assemble(
                     .map(|p| Phase {
                         name: p.name.clone(),
                         label: p.label.clone(),
+                    })
+                    .collect(),
+                pipeline: pipeline
+                    .iter()
+                    .map(|p| PipelineStep {
+                        name: p.name.clone(),
+                        label: p.label.clone(),
+                        phase: p.phase.clone(),
+                        paired: p.paired,
                     })
                     .collect(),
             },
@@ -353,6 +363,7 @@ fn build_block(
             };
             BlockNode {
                 phases,
+                pipeline: log_node.map_or_else(Vec::new, |n| pipeline_rows(&n.items, start_abs)),
                 crashed_ms,
                 crash_kind,
                 participated,
@@ -372,6 +383,30 @@ fn build_block(
         nodes,
         logs: block_logs(log, raw_log, start_abs, metric, starts),
     }
+}
+
+/// Encodes a node's pipeline items as wire rows rebased to the block start, each [kind, s, d, s2,
+/// d2] truncated where a segment dangles, so a dangling end is carried by arity rather than a
+/// sentinel. Rows sort by start then kind.
+fn pipeline_rows(items: &[PipelineItem], start_abs: i64) -> Vec<Vec<i64>> {
+    let mut rows: Vec<Vec<i64>> = items
+        .iter()
+        .map(|item| {
+            let mut row = vec![item.kind as i64, item.first.0 - start_abs];
+            if let Some(end) = item.first.1 {
+                row.push(end - item.first.0);
+                if let Some((start2, end2)) = item.second {
+                    row.push(start2 - start_abs);
+                    if let Some(end2) = end2 {
+                        row.push(end2 - start2);
+                    }
+                }
+            }
+            row
+        })
+        .collect();
+    rows.sort_by_key(|row| (row[1], row[0]));
+    rows
 }
 
 /// The kept cluster-log lines within a block's proving window, each rebased to a microsecond offset
@@ -725,12 +760,14 @@ mod tests {
     use crate::parse_benchmark::{
         input::{
             dmon::DmonRow,
-            log::{Log, LogNode, LogStatus, NodeEnd, NodeEndKind, Ts, lines::RawLine},
+            log::{
+                Log, LogNode, LogStatus, NodeEnd, NodeEndKind, PipelineItem, Ts, lines::RawLine,
+            },
             metrics::{MetricBlock, MetricStatus},
         },
         output::assemble::{
             benchmark_name, block_logs, build_block, match_blocks_to_logs, metric_cell,
-            node_proving_windows, node_stats,
+            node_proving_windows, node_stats, pipeline_rows,
         },
     };
 
@@ -807,6 +844,7 @@ mod tests {
             .map(|id| LogNode {
                 id: id.to_string(),
                 phases: vec![Some(window)],
+                items: Vec::new(),
                 end: None,
             })
             .collect();
@@ -935,6 +973,7 @@ mod tests {
         a.nodes = vec![LogNode {
             id: "node1".to_string(),
             phases: Vec::new(),
+            items: Vec::new(),
             end: Some(NodeEnd {
                 at_ms: at("26").epoch_ms(),
                 kind: NodeEndKind::Crashed,
@@ -1023,6 +1062,7 @@ mod tests {
         log.nodes = vec![LogNode {
             id: "node1".to_string(),
             phases: vec![None],
+            items: Vec::new(),
             end: Some(NodeEnd {
                 at_ms: at("05").epoch_ms(),
                 kind: NodeEndKind::Crashed,
@@ -1040,6 +1080,122 @@ mod tests {
         );
         assert_eq!(block.nodes[0].crashed_ms, Some(0));
         assert_eq!(block.nodes[0].crash_kind.as_deref(), Some("crashed"));
+    }
+
+    #[test]
+    fn pipeline_items_rebase_and_encode_by_arity() {
+        let at = |s: &str| Ts::parse(&format!("2026-01-01T00:00:{s}Z")).unwrap();
+        let start = at("10").epoch_ms();
+        // One node holding the four item states, a lone segment, a full witness and compute pair,
+        // a witness whose compute dangles, and a bare dangling open.
+        let mut log = Log::new("job");
+        log.status = LogStatus::Success;
+        log.t_start = Some(at("10"));
+        log.participants = vec!["node1".to_string()];
+        log.nodes = vec![LogNode {
+            id: "node1".to_string(),
+            phases: vec![None],
+            items: vec![
+                PipelineItem {
+                    kind: 0,
+                    first: (start + 100, Some(start + 300)),
+                    second: None,
+                },
+                PipelineItem {
+                    kind: 7,
+                    first: (start + 400, Some(start + 600)),
+                    second: Some((start + 700, Some(start + 900))),
+                },
+                PipelineItem {
+                    kind: 2,
+                    first: (start + 1000, Some(start + 1100)),
+                    second: Some((start + 1200, None)),
+                },
+                PipelineItem {
+                    kind: 8,
+                    first: (start + 1300, None),
+                    second: None,
+                },
+            ],
+            end: None,
+        }];
+        let node_ids = vec!["node1".to_string()];
+        let block = build_block(
+            &success_block("a", "20"),
+            Some(&log),
+            &node_ids,
+            1,
+            start,
+            &[],
+            &[],
+        );
+        // Each state encodes by arity, the dangling ends carried by truncation.
+        assert_eq!(
+            block.nodes[0].pipeline,
+            vec![
+                vec![0, 100, 200],
+                vec![7, 400, 200, 700, 200],
+                vec![2, 1000, 100, 1200],
+                vec![8, 1300],
+            ]
+        );
+    }
+
+    #[test]
+    fn pipeline_rows_sort_by_start_then_kind() {
+        // Items arrive in close order rather than start order, and two rows share a start.
+        let items = vec![
+            PipelineItem {
+                kind: 5,
+                first: (100, Some(150)),
+                second: None,
+            },
+            PipelineItem {
+                kind: 3,
+                first: (100, Some(120)),
+                second: None,
+            },
+            PipelineItem {
+                kind: 0,
+                first: (50, Some(90)),
+                second: None,
+            },
+        ];
+        let rows = pipeline_rows(&items, 0);
+        assert_eq!(
+            rows,
+            vec![vec![0, 50, 40], vec![3, 100, 20], vec![5, 100, 50]]
+        );
+    }
+
+    #[test]
+    fn a_block_without_pipeline_omits_the_field() {
+        let at = |s: &str| Ts::parse(&format!("2026-01-01T00:00:{s}Z")).unwrap();
+        let mut log = Log::new("job");
+        log.status = LogStatus::Success;
+        log.t_start = Some(at("10"));
+        log.participants = vec!["node1".to_string()];
+        log.nodes = vec![LogNode {
+            id: "node1".to_string(),
+            phases: vec![None],
+            items: Vec::new(),
+            end: None,
+        }];
+        let node_ids = vec!["node1".to_string()];
+        let block = build_block(
+            &success_block("a", "20"),
+            Some(&log),
+            &node_ids,
+            1,
+            at("10").epoch_ms(),
+            &[],
+            &[],
+        );
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(
+            !json.contains("\"pipeline\""),
+            "an empty pipeline serializes no key"
+        );
     }
 
     #[test]

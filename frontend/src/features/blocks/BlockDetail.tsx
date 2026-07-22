@@ -12,7 +12,7 @@ import { SectionHeading } from '@/components/common/SectionHeading';
 import { StatStrip } from '@/components/common/StatStrip';
 import { GpuTelemetry } from '@/components/charts/GpuTelemetry';
 import { IconButton } from '@/components/common/IconButton';
-import { IconFullscreen } from '@/components/common/icons';
+import { IconFullscreen, IconPipeline } from '@/components/common/icons';
 import type { PhaseBand } from '@/components/charts/MetricChart';
 import { cx } from '@/utils/cx';
 import { useBench } from '@/hooks/useBench';
@@ -23,6 +23,8 @@ import { msToSec } from '@/utils/format';
 import { blockOverviewFields } from '@/features/blocks/blockOverview';
 import { BlockTrace } from '@/features/blocks/BlockTrace';
 import { BlockTraceFullscreen } from '@/features/blocks/BlockTraceFullscreen';
+import { BlockPipelineFullscreen } from '@/features/blocks/BlockPipelineFullscreen';
+import { hasPipeline } from '@/utils/pipelineItems';
 import { statusColor } from '@/features/blocks/blockFilters';
 import type { Block, Run } from '@/types/benchmark';
 
@@ -47,6 +49,7 @@ export function BlockDetail({ run, block, onClose }: { run: Run; block: Block; o
   const bench = useBench();
   const { nodes, registry, telemetryById } = useBenchDerived(run);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pipelineFullscreen, setPipelineFullscreen] = useState(false);
 
   const provingSec = block.proving_ms != null ? msToSec(block.proving_ms) : null;
   // End of the trace in seconds. A successful proof ends at its proving time, a crashed proof has none
@@ -80,10 +83,19 @@ export function BlockDetail({ run, block, onClose }: { run: Run; block: Block; o
       <ChartPanel
         title="Trace"
         action={
-          hasTimeline(block) ? (
-            <IconButton onClick={() => setFullscreen(true)} label="Open trace fullscreen">
-              <IconFullscreen />
-            </IconButton>
+          hasTimeline(block) || hasPipeline(bench, block) ? (
+            <div className="flex items-center gap-1">
+              {hasTimeline(block) && (
+                <IconButton onClick={() => setFullscreen(true)} label="Open trace fullscreen">
+                  <IconFullscreen />
+                </IconButton>
+              )}
+              {hasPipeline(bench, block) && (
+                <IconButton onClick={() => setPipelineFullscreen(true)} label="Open pipeline fullscreen">
+                  <IconPipeline />
+                </IconButton>
+              )}
+            </div>
           ) : undefined
         }
       >
@@ -122,6 +134,18 @@ export function BlockDetail({ run, block, onClose }: { run: Run; block: Block; o
             nodes={nodes}
             registry={registry}
             onClose={() => setFullscreen(false)}
+          />,
+          document.body
+        )}
+
+      {pipelineFullscreen &&
+        createPortal(
+          <BlockPipelineFullscreen
+            bench={bench}
+            block={block}
+            nodes={nodes}
+            registry={registry}
+            onClose={() => setPipelineFullscreen(false)}
           />,
           document.body
         )}

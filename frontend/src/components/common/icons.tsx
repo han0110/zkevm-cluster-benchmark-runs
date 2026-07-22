@@ -134,6 +134,17 @@ export function IconCheck(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Offset thin horizontal bars, a waterfall, the pipeline-fullscreen affordance on a chart panel.
+export function IconPipeline(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M3 6h8" />
+      <path d="M8 12h8" />
+      <path d="M13 18h8" />
+    </Icon>
+  );
+}
+
 // A funnel, the include side of the log filter. Tinted by the caller, green for include. Drawn on its
 // own frame at a smaller size than the shared Icon so it sits inside a compact input.
 export function IconFilter({ className, ...rest }: SVGProps<SVGSVGElement>) {

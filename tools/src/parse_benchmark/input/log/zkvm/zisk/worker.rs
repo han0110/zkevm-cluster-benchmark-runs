@@ -1,11 +1,12 @@
 //! Reads the zisk worker logs for aggregation bounds and per-node phase progress.
 //!
-//! The worker logs are large, so each is read and ansi-stripped once and handed to both sub-parsers
+//! The worker logs are large, so each is read and ansi-stripped once and handed to each sub-parser
 //! in one pass. `parse_agg` recovers a clean job's aggregation window from the aggregator's
-//! markers, and `parse_stages` reconstructs the per-node sub-phase timeline a crashed job leaves
+//! markers, `parse_stages` reconstructs the per-node sub-phase timeline a crashed job leaves
 //! behind because the coordinator logs a phase only when it finishes while the worker brackets
-//! every sub-step. Stage and aggregation fields are first-write-wins, so a later job on the same
-//! worker never overwrites an earlier one.
+//! every sub-step, and `pipeline::parse` extracts the fine pipeline items from those brackets.
+//! Stage and aggregation fields are first-write-wins, so a later job on the same worker never
+//! overwrites an earlier one.
 
 use std::{collections::BTreeMap, path::Path, sync::LazyLock};
 
@@ -13,18 +14,24 @@ use crate::parse_benchmark::input::{
     WORKER_LOG_RE,
     log::{
         Ts, job_prefix,
-        zkvm::{cap, strip_ansi},
+        zkvm::{
+            cap, strip_ansi,
+            zisk::pipeline::{self, JobPipelines},
+        },
     },
     worker_files_sorted,
 };
 
-/// Everything recovered from the worker logs, the per-job aggregation bounds and node stages.
+/// Everything recovered from the worker logs, the per-job aggregation bounds, node stages, and
+/// fine pipeline items.
 pub struct WorkerData {
     /// Per-job aggregation bounds, keyed by the eight-hex job prefix so the key matches the stage
     /// map and the coordinator-side lookup regardless of how each log truncates the job id.
     pub agg: BTreeMap<String, AggBounds>,
     /// Per-job sub-phase stage timestamps, keyed by the eight-hex job prefix then by node.
     pub stages: BTreeMap<String, JobStages>,
+    /// Per-job fine pipeline items, keyed by the eight-hex job prefix then by node.
+    pub pipelines: BTreeMap<String, JobPipelines>,
 }
 
 /// Aggregation timing bounds for one job, recovered from the aggregator worker log.
@@ -85,18 +92,25 @@ static RE_AGG_DONE: LazyLock<regex::Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
-/// Loads aggregation bounds and node phase stages from every worker-N.log under a logs directory.
+/// Loads aggregation bounds, node phase stages, and pipeline items from every worker-N.log under a
+/// logs directory.
 pub fn load(logs_dir: &Path) -> crate::parse_benchmark::Result<WorkerData> {
     let mut agg = BTreeMap::new();
     let mut stages = BTreeMap::new();
+    let mut pipelines = BTreeMap::new();
     for (digit, path) in worker_files_sorted(logs_dir, &WORKER_LOG_RE)? {
         let text = crate::parse_benchmark::read_to_string_at(&path)?;
         let clean = strip_ansi(&text);
         let node = format!("node{digit}");
         parse_agg(&clean, &mut agg)?;
         parse_stages(&clean, &node, &mut stages)?;
+        pipeline::parse(&clean, &node, &mut pipelines)?;
     }
-    Ok(WorkerData { agg, stages })
+    Ok(WorkerData {
+        agg,
+        stages,
+        pipelines,
+    })
 }
 
 /// Parses one ansi-stripped worker log's aggregation markers into per-job bounds, keyed by the
@@ -241,7 +255,7 @@ fn parse_stages(
 /// Whether a line begins with a timestamp, the digit-led tracing lines. The restart banner and the
 /// mpirun teardown output begin with a letter or symbol, so this cheaply separates job sub-steps
 /// from the restart output a crash interleaves between two jobs.
-fn has_ts(line: &str) -> bool {
+pub(crate) fn has_ts(line: &str) -> bool {
     line.as_bytes().first().is_some_and(u8::is_ascii_digit)
 }
 
@@ -249,7 +263,7 @@ fn has_ts(line: &str) -> bool {
 /// signal teardown that precedes it. Each appears once per process start, never per job, so seeing
 /// one while a job runs is the worker-log signature that the node crashed and is restarting. Only
 /// the non-timestamped lines are tested, so a job's own log text never trips it.
-fn is_restart_banner(line: &str) -> bool {
+pub(crate) fn is_restart_banner(line: &str) -> bool {
     line.starts_with("ZisK Worker")
         || line.starts_with("Primary job")
         || line.contains("exited on signal")
@@ -271,7 +285,7 @@ fn info_body(line: &str) -> Option<&str> {
 }
 
 /// The leading whitespace-delimited token of a line, its timestamp.
-fn leading_ts(line: &str) -> &str {
+pub(crate) fn leading_ts(line: &str) -> &str {
     line.split(' ').next().unwrap_or("")
 }
 
