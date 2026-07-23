@@ -40,8 +40,8 @@ pub struct WorkerData {
     /// Per-proof metered-execution starts, keyed by the full proof uuid then by node, each the
     /// earliest parallel-coordinator announcement among the node's workers.
     pub announcements: BTreeMap<String, JobAnnouncements>,
-    /// Per-proof metered-execution ends, keyed by the full proof uuid then by node, each the latest
-    /// segment-send moment among the node's workers.
+    /// Per-proof metered-execution ends, keyed by the full proof uuid then by node, each the
+    /// latest segment-send moment among the node's workers.
     pub sends: BTreeMap<String, JobSends>,
     /// Per-proof input-transfer ends, keyed by the full proof uuid then by node, each the latest
     /// input-file-written time among the node's workers, when its input transfer completes.
@@ -262,9 +262,10 @@ pub(crate) fn parse_worker(
     }
     // One derived metered-execution item per segment this worker sends for a proof it also
     // announces, carrying the segment id it shares with the app segment of the same index. A single
-    // executor thread meters the worker's segments serially, so the items tile without overlap, each
-    // starting at the prior segment's send and the first at the announcement, which keeps the VM
-    // setup prologue on the first item. A worker missing its announcement derives nothing.
+    // executor thread meters the worker's segments serially, so the items tile without overlap,
+    // each starting at the prior segment's send and the first at the announcement, which keeps
+    // the VM setup prologue on the first item. A worker missing its announcement derives
+    // nothing.
     for (job, ts) in coordinator {
         let Some(segments) = sent.get(&job) else {
             continue;

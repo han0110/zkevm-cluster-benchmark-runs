@@ -211,10 +211,10 @@ impl MetricsMeta {
 }
 
 /// Splits a name-vX.Y.Z token into its name and version parts at the last "-v" immediately followed
-/// by a digit. Absent such a suffix, it falls back to a trailing "-<short sha>", a hyphen followed by
-/// seven or more lowercase hex characters running to the token end, so a git-sha-suffixed token like
-/// reth-c5dff62 yields name reth and version c5dff62. A token matching neither rule yields the whole
-/// token as the name and no version.
+/// by a digit. Absent such a suffix, it falls back to a trailing "-<short sha>", a hyphen followed
+/// by seven or more lowercase hex characters running to the token end, so a git-sha-suffixed token
+/// like reth-c5dff62 yields name reth and version c5dff62. A token matching neither rule yields the
+/// whole token as the name and no version.
 fn split_name_version(token: &str) -> (String, Option<String>) {
     let at = token
         .match_indices("-v")
@@ -228,8 +228,8 @@ fn split_name_version(token: &str) -> (String, Option<String>) {
     }
 }
 
-/// The byte index of the hyphen before a trailing short git sha, a suffix of seven or more lowercase
-/// hex characters running to the token end. None when the last segment is not such a sha.
+/// The byte index of the hyphen before a trailing short git sha, a suffix of seven or more
+/// lowercase hex characters running to the token end. None when the last segment is not such a sha.
 fn short_sha_split(token: &str) -> Option<usize> {
     let at = token.rfind('-')?;
     let suffix = &token[at + 1..];

@@ -69,7 +69,8 @@ pub fn load_raw_lines(logs_dir: &Path) -> crate::parse_benchmark::Result<Vec<Raw
 }
 
 /// The role string for a worker log file, "workerN" for worker-N.log and "workerN-gpuG" for the
-/// per-GPU worker-N-gpuG.log, so lines from each GPU worker stay distinguishable on the shared clock.
+/// per-GPU worker-N-gpuG.log, so lines from each GPU worker stay distinguishable on the shared
+/// clock.
 fn worker_role(name: &str, digit: u32) -> String {
     match WORKER_LOG_RE.captures(name).and_then(|c| c.get(2)) {
         Some(gpu) => format!("worker{digit}-gpu{}", gpu.as_str()),

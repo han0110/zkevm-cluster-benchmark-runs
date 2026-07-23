@@ -127,7 +127,8 @@ pub struct NodeEnd {
 pub struct LogNode {
     pub id: String,
     pub phases: Vec<Option<(i64, i64)>>,
-    /// The node's fine pipeline items in template kind terms, empty when the backend extracts none.
+    /// The node's fine pipeline items in template kind terms, empty when the backend extracts
+    /// none.
     pub items: Vec<PipelineItem>,
     pub end: Option<NodeEnd>,
 }

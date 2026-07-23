@@ -154,7 +154,8 @@ fn build_nodes(
                 .collect();
             let mut phases = vec![None; PHASE_COUNT];
             // Input transfer runs from the manager's fan-out start to the node's last
-            // input-file-written time among its workers, and stays null when either side is missing.
+            // input-file-written time among its workers, and stays null when either side is
+            // missing.
             phases[INPUT] =
                 input_window(raw.fanout_start_us, writes.and_then(|m| m.get(id)).copied());
             // Metered execution runs from the node's earliest parallel-coordinator announcement to
