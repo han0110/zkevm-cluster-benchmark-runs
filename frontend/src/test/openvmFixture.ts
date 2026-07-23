@@ -1,5 +1,5 @@
 /*
- * Builders for an openvm-shaped benchmark whose metered execution, segment, and recursion phases carry the
+ * Builders for an openvm-shaped benchmark whose execution, segment, and recursion phases carry the
  * overlap flag, three consecutive overlap phases the zisk fixture cannot reach, for tests of the overlap
  * registry and the chain-band window math. Blocks are built per test because each case needs its own
  * precise phase windows.
@@ -42,7 +42,7 @@ export const openvmBenchmark = (blocks: Block[]): Benchmark => ({
       version: 'test',
       phases: [
         { name: 'input', label: 'Input Transfer' },
-        { name: 'metered_execution', label: 'Metered Execution', overlap: true },
+        { name: 'execution', label: 'Execution', overlap: true },
         { name: 'segment', label: 'Segment', overlap: true },
         { name: 'recursion', label: 'Recursion', overlap: true },
         { name: 'wrap', label: 'Wrap' },

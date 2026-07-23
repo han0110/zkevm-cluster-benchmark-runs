@@ -21,7 +21,7 @@ const PHASE_PRESETS: Record<string, Record<string, string>> = {
   },
   openvm: {
     input: 'var(--color-phase-muted)',
-    metered_execution: 'var(--color-phase-1)',
+    execution: 'var(--color-phase-1)',
     segment: 'var(--color-phase-2)',
     recursion: 'var(--color-phase-3)',
     wrap: 'var(--color-phase-4)',

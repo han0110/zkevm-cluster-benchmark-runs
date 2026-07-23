@@ -9,11 +9,11 @@ import type { Block } from '@/types/benchmark';
 // Registry for exactly the given blocks, so each case shapes its own windows.
 const registryOf = (blocks: Block[]) => buildPhaseRegistry(openvmBenchmark(blocks));
 
-// One block whose cluster windows on node A are input [0, 0.2], metered execution [0.4, 1.4], segment
-// [1.2, 3.0], recursion [2.4, 3.6], and wrap [3.6, 4.0] in seconds, and on node B input [0, 0.3], metered
-// execution [0.4, 1.6], segment [1.3, 3.4], recursion [2.8, 3.8], and no wrap. Metered overlaps segment,
-// segment overlaps recursion, and metered stays clear of recursion, so the chain carries two bands and no
-// triple region. Node A works to 4.0 s and node B to 3.8 s.
+// One block whose cluster windows on node A are input [0, 0.2], execution [0.4, 1.4], segment
+// [1.2, 3.0], recursion [2.4, 3.6], and wrap [3.6, 4.0] in seconds, and on node B input [0, 0.3],
+// execution [0.4, 1.6], segment [1.3, 3.4], recursion [2.8, 3.8], and no wrap. Execution overlaps
+// segment, segment overlaps recursion, and execution stays clear of recursion, so the chain carries
+// two bands and no triple region. Node A works to 4.0 s and node B to 3.8 s.
 const nodeA = openvmNode([win(0, 200), win(400, 1000), win(1200, 1800), win(2400, 1200), win(3600, 400)]);
 const nodeB = openvmNode([win(0, 300), win(400, 1200), win(1300, 2100), win(2800, 1000), null]);
 const overlappingBlock = openvmBlock('b0', [nodeA, nodeB]);
@@ -28,7 +28,7 @@ describe('hasOverlapPhases', () => {
 describe('meanWindowPhases cluster total mode', () => {
   it('divides each phase sum by the counted block count over the pooled-time shares', () => {
     // Two identical blocks of two node data points working 4.0 s and 3.8 s. Phase sums over the 15.6 s of
-    // working time give input 1.0, metered 4.4, segment 7.8, recursion 4.4, wrap 0.8, and a Rest of 0.6.
+    // working time give input 1.0, execution 4.4, segment 7.8, recursion 4.4, wrap 0.8, and a Rest of 0.6.
     // Cluster total divides each by the two counted blocks, so the seconds read the summed node-time per
     // block, half of what dividing by the four data points would give.
     const blocks = [overlappingBlock, { ...overlappingBlock, name: 'b1' }];
@@ -36,14 +36,14 @@ describe('meanWindowPhases cluster total mode', () => {
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     expect(total).toBeCloseTo(7.8);
     expect(byKey['input']!.seconds).toBeCloseTo(0.5);
-    expect(byKey['metered_execution']!.seconds).toBeCloseTo(2.2);
+    expect(byKey['execution']!.seconds).toBeCloseTo(2.2);
     expect(byKey['segment']!.seconds).toBeCloseTo(3.9);
     expect(byKey['recursion']!.seconds).toBeCloseTo(2.2);
     expect(byKey['wrap']!.seconds).toBeCloseTo(0.4);
     expect(byKey['rest']!.seconds).toBeCloseTo(0.3);
     // Shares divide each sum by the summed working span, unchanged by the block-count seconds divisor.
     expect(byKey['input']!.placed!.frac).toBeCloseTo(0.0641);
-    expect(byKey['metered_execution']!.placed!.frac).toBeCloseTo(0.2821);
+    expect(byKey['execution']!.placed!.frac).toBeCloseTo(0.2821);
     expect(byKey['segment']!.placed!.frac).toBeCloseTo(0.5);
     expect(byKey['recursion']!.placed!.frac).toBeCloseTo(0.2821);
     expect(byKey['wrap']!.placed!.frac).toBeCloseTo(0.0513);
@@ -66,9 +66,9 @@ describe('meanWindowPhases cluster total mode', () => {
     const blocks = [overlappingBlock];
     const { phases } = meanWindowPhases(blocks, registryOf(blocks), 'clusterTotal');
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
-    // Input then metered tile end to end, then segment starts the first band's width before metered ends.
+    // Input then execution tile end to end, then segment starts the first band's width before execution ends.
     expect(byKey['input']!.placed!.start).toBeCloseTo(0);
-    expect(byKey['metered_execution']!.placed!.start).toBeCloseTo(0.0641);
+    expect(byKey['execution']!.placed!.start).toBeCloseTo(0.0641);
     expect(byKey['segment']!.placed!.start).toBeCloseTo(0.2821);
     expect(byKey['segment']!.placed!.width).toBeCloseTo(0.5);
     // Recursion starts the second band's width before segment ends, so segment joins both bands.
@@ -91,7 +91,7 @@ describe('meanWindowPhases per node mode', () => {
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     expect(total).toBeCloseTo(3.9);
     expect(byKey['input']!.seconds).toBeCloseTo(0.25);
-    expect(byKey['metered_execution']!.seconds).toBeCloseTo(1.1);
+    expect(byKey['execution']!.seconds).toBeCloseTo(1.1);
     expect(byKey['segment']!.seconds).toBeCloseTo(1.95);
     expect(byKey['recursion']!.seconds).toBeCloseTo(1.1);
     expect(byKey['wrap']!.seconds).toBeCloseTo(0.4);
@@ -106,14 +106,14 @@ describe('meanWindowPhases per node mode', () => {
     const { phases } = meanWindowPhases(blocks, registryOf(blocks), 'perNode');
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     expect(byKey['input']!.placed!.frac).toBeCloseTo(0.061);
-    expect(byKey['metered_execution']!.placed!.frac).toBeCloseTo(0.2683);
+    expect(byKey['execution']!.placed!.frac).toBeCloseTo(0.2683);
     expect(byKey['segment']!.placed!.frac).toBeCloseTo(0.4756);
     expect(byKey['recursion']!.placed!.frac).toBeCloseTo(0.2683);
     expect(byKey['wrap']!.placed!.frac).toBeCloseTo(0.0976);
     expect(byKey['rest']!.placed!.frac).toBeCloseTo(0.0366);
-    // Input then metered tile end to end, segment shares the first band, recursion the second.
+    // Input then execution tile end to end, segment shares the first band, recursion the second.
     expect(byKey['input']!.placed!.start).toBeCloseTo(0);
-    expect(byKey['metered_execution']!.placed!.start).toBeCloseTo(0.061);
+    expect(byKey['execution']!.placed!.start).toBeCloseTo(0.061);
     expect(byKey['segment']!.placed!.start).toBeCloseTo(0.2683);
     expect(byKey['recursion']!.placed!.start).toBeCloseTo(0.5976);
     expect(byKey['wrap']!.placed!.start).toBeCloseTo(0.8659);
@@ -123,7 +123,7 @@ describe('meanWindowPhases per node mode', () => {
   it('charges no Rest for the trailing idle after a node finishes early', () => {
     // One node works to 5 s and another finishes at 3 s, both fully covered by their phases. The early
     // node's 2 s of idle while the first keeps working is not Rest, so the run carries none and its span
-    // averages 4 s, not the 5 s wall clock. Metered clears segment on both nodes, leaving only the
+    // averages 4 s, not the 5 s wall clock. Execution clears segment on both nodes, leaving only the
     // segment/recursion band.
     const late = openvmNode([win(0, 500), win(500, 500), win(1000, 2000), win(2500, 1500), win(4000, 1000)]);
     const early = openvmNode([win(0, 500), win(500, 500), win(1000, 1500), win(2000, 1000), null]);
@@ -163,7 +163,7 @@ describe('meanWindowPhases per node mode', () => {
 
 describe('meanWindowPhases chain bands', () => {
   it('tiles the row to one when every overlap pair is disjoint', () => {
-    // Metered [0.1, 0.4] ends before segment [0.6, 1.0] starts, and segment ends before recursion
+    // Execution [0.1, 0.4] ends before segment [0.6, 1.0] starts, and segment ends before recursion
     // [2.0, 3.0] starts, so neither pair carries an overlap and no band is subtracted.
     const disjoint = openvmBlock('b0', [openvmNode([win(0, 100), win(100, 300), win(600, 400), win(2000, 1000), win(3000, 500)])]);
     const { phases } = meanWindowPhases([disjoint], registryOf([disjoint]));
@@ -241,9 +241,9 @@ describe('placedSegmentPieces', () => {
   });
 
   it('stripes a triple overlap for its two latest phases and never repaints an interval', () => {
-    // Three chained spans, metered [0, 6], segment [3, 9], recursion [5, 12], overlap so all three cover
+    // Three chained spans, execution [0, 6], segment [3, 9], recursion [5, 12], overlap so all three cover
     // [5, 6]. That triple interval paints once as the later segment/recursion pair, the earlier
-    // metered/segment band stops where recursion begins, and no metered/recursion stripe is drawn.
+    // execution/segment band stops where recursion begins, and no execution/recursion stripe is drawn.
     const segments = [{ start: 0, end: 6 }, { start: 3, end: 9 }, { start: 5, end: 12 }];
     expect(placedSegmentPieces(segments, 0)).toEqual({ solid: [{ start: 0, end: 3 }], striped: [] });
     expect(placedSegmentPieces(segments, 1)).toEqual({
@@ -287,12 +287,12 @@ describe('overview phase breakdown pieces', () => {
     const { phases } = meanWindowPhases([overlappingBlock], registryOf([overlappingBlock]));
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     const pieces = rowPieces(phases);
-    const meteredSolid = pieces.find(p => p.name === 'Metered Execution')!;
-    const meteredBand = pieces.find(p => p.name === 'Metered Execution + Segment')!;
-    // The metered solid piece is the metered phase share less the metered/segment band it shares, well
+    const executionSolid = pieces.find(p => p.name === 'Execution')!;
+    const executionBand = pieces.find(p => p.name === 'Execution + Segment')!;
+    // The execution solid piece is the execution phase share less the execution/segment band it shares, well
     // under its full phase share.
-    expect(meteredSolid.width).toBeCloseTo(byKey['metered_execution']!.placed!.frac - meteredBand.width, 10);
-    expect(meteredSolid.width).toBeLessThan(byKey['metered_execution']!.placed!.frac);
+    expect(executionSolid.width).toBeCloseTo(byKey['execution']!.placed!.frac - executionBand.width, 10);
+    expect(executionSolid.width).toBeLessThan(byKey['execution']!.placed!.frac);
   });
 
   it('apportions the row pieces so the label integers sum to exactly 100', () => {
@@ -305,8 +305,8 @@ describe('overview phase breakdown pieces', () => {
     const { phases } = meanWindowPhases([overlappingBlock], registryOf([overlappingBlock]));
     expect(rowPieces(phases).map(p => p.name)).toEqual([
       'Input Transfer',
-      'Metered Execution',
-      'Metered Execution + Segment',
+      'Execution',
+      'Execution + Segment',
       'Segment',
       'Segment + Recursion',
       'Recursion',

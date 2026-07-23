@@ -173,9 +173,13 @@ pub struct PipelineItemMeta {
     pub gpu_heavy: Option<usize>,
 }
 
-/// The leading hex run of a token, the canonical key the coordinator's truncated job id, a crash
-/// reason's full uuid, and the worker logs all share.
+/// The canonical key a token shares across the coordinator log, a crash reason, and the worker
+/// logs. An openvm ere- id is logged in full on every side, so the whole token is the key; every
+/// other id (zisk) is truncated with an ellipsis, so its leading hex run is the key.
 pub fn job_prefix(token: &str) -> String {
+    if token.starts_with("ere-") {
+        return token.to_string();
+    }
     token
         .chars()
         .take_while(|c| c.is_ascii_hexdigit())
@@ -187,9 +191,14 @@ mod tests {
     use crate::parse_benchmark::input::log::{Ts, job_prefix};
 
     #[test]
-    fn prefix_is_the_leading_hex_run() {
+    fn prefix_keys_a_truncated_hex_id_and_a_full_ere_id() {
         assert_eq!(job_prefix("efd42874-b32d-4539"), "efd42874");
         assert_eq!(job_prefix("efd42874\u{2026}"), "efd42874");
+        // An openvm ere- id has no leading hex run, so the whole token is its key.
+        assert_eq!(
+            job_prefix("ere-a275aee5c2364484bb429e48dabf6738"),
+            "ere-a275aee5c2364484bb429e48dabf6738"
+        );
     }
 
     #[test]

@@ -713,8 +713,9 @@ fn within_windows(t: i64, windows: &[(i64, i64)]) -> bool {
     windows.iter().any(|&(start, end)| t >= start && t <= end)
 }
 
-/// Whether a log id is a prefix of a cluster job id. The coordinator prints a truncated id while a
-/// crash reason carries the full uuid, so the log's leading hex run is compared.
+/// Whether a log id keys the same cluster job as a crash reason's id. The zisk coordinator prints a
+/// truncated id against the reason's full uuid, so the leading hex run is compared; an openvm ere-
+/// id is logged in full on both sides, so job_prefix keeps it whole and the compare is exact.
 fn job_prefix_matches(log_id: &str, job: &str) -> bool {
     let prefix = job_prefix(log_id);
     !prefix.is_empty() && job.starts_with(&prefix)
@@ -968,6 +969,27 @@ mod tests {
         ];
         let matched = match_blocks_to_logs(&logs, &blocks);
         assert_eq!(matched, vec![Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn an_openvm_crash_binds_to_its_full_ere_log_not_the_first() {
+        // Every openvm log id shares the leading hex "e" of "ere-", so a leading-hex-run match
+        // would bind the first ere- log. Keeping the ere- id whole binds the exact one.
+        let logs = vec![
+            log(
+                "ere-a275aee5c2364484bb429e48dabf6738",
+                LogStatus::Failed,
+                "10",
+            ),
+            log(
+                "ere-2b70e62f1f704f2ab54adffc7871155e",
+                LogStatus::Failed,
+                "30",
+            ),
+        ];
+        let blocks = vec![crash_block("boom", "ere-2b70e62f1f704f2ab54adffc7871155e")];
+        let matched = match_blocks_to_logs(&logs, &blocks);
+        assert_eq!(matched, vec![Some(1)]);
     }
 
     #[test]

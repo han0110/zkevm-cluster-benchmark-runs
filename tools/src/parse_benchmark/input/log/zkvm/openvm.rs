@@ -20,13 +20,13 @@ use crate::parse_benchmark::input::log::{
 /// The openvm backend.
 pub struct OpenvmParser;
 
-/// Returns the ordered openvm phase preset. The metered execution, segment, and recursion phases
-/// overlap because the executor meters segments while they prove and recursion consumes segments as
-/// they complete, so none of the three is a blocking stage.
+/// Returns the ordered openvm phase preset. The execution, segment, and recursion phases overlap
+/// because the executor meters segments while they prove and recursion consumes segments as they
+/// complete, so none of the three is a blocking stage.
 pub fn openvm_phases() -> Vec<PhaseDef> {
     [
         ("input", "Input Transfer", false),
-        ("metered_execution", "Metered Execution", true),
+        ("execution", "Execution", true),
         ("segment", "Segment", true),
         ("recursion", "Recursion", true),
         ("wrap", "Wrap", false),
@@ -112,7 +112,7 @@ mod tests {
             .collect();
         let expected = [
             ("input", "Input Transfer", false),
-            ("metered_execution", "Metered Execution", true),
+            ("execution", "Execution", true),
             ("segment", "Segment", true),
             ("recursion", "Recursion", true),
             ("wrap", "Wrap", false),

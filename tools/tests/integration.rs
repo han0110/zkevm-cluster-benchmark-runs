@@ -557,8 +557,8 @@ fn openvm_backend_parses_cluster_logs() {
 
     assert_eq!(parsed.name, "openvm");
     assert_eq!(parsed.phases.len(), 5, "phase preset");
-    // Metered execution, segment, and recursion are the overlap phases, since the executor meters
-    // segments while they prove and recursion consumes segments as they complete.
+    // Execution, segment, and recursion are the overlap phases, since the executor meters segments
+    // while they prove and recursion consumes segments as they complete.
     let preset: Vec<(&str, bool)> = parsed
         .phases
         .iter()
@@ -568,15 +568,15 @@ fn openvm_backend_parses_cluster_logs() {
         preset,
         vec![
             ("input", false),
-            ("metered_execution", true),
+            ("execution", true),
             ("segment", true),
             ("recursion", true),
             ("wrap", false),
         ]
     );
-    // No openvm kind is paired, the work items each logging one self-contained completion span
-    // and metered execution deriving one span per sent segment.
-    assert_eq!(parsed.pipeline.len(), 5, "kind template");
+    // No openvm kind is paired, the work items each logging one self-contained completion span,
+    // execution deriving one span per sent segment, and fast-forward taken from each proof line.
+    assert_eq!(parsed.pipeline.len(), 6, "kind template");
     assert!(parsed.pipeline.iter().all(|k| !k.paired));
     let success = parsed
         .logs
@@ -608,11 +608,11 @@ fn openvm_assembles_document_with_an_unlogged_block() {
     assert_eq!(b.software.zkvm.version, "8f86342");
     assert_eq!(b.software.guest.name, "reth");
     assert_eq!(b.software.guest.version, "c5dff62");
-    assert_eq!(b.software.zkvm.phases[1].name, "metered_execution");
-    assert_eq!(b.software.zkvm.phases[1].label, "Metered Execution");
+    assert_eq!(b.software.zkvm.phases[1].name, "execution");
+    assert_eq!(b.software.zkvm.phases[1].label, "Execution");
     assert_eq!(b.software.zkvm.phases[4].label, "Wrap");
     // The pipeline kinds keep their wire indices and labels while their phase ownership follows
-    // the preset.
+    // the preset. Fast-forward is the prover's re-execution, so it shares the execution phase.
     let owners: Vec<(&str, &str)> = b
         .software
         .zkvm
@@ -623,7 +623,8 @@ fn openvm_assembles_document_with_an_unlogged_block() {
     assert_eq!(
         owners,
         vec![
-            ("metered_execution", "metered_execution"),
+            ("execution", "execution"),
+            ("fastfwd", "execution"),
             ("app_segment", "segment"),
             ("leaf", "recursion"),
             ("internal", "recursion"),
@@ -658,29 +659,30 @@ fn openvm_assembles_document_with_an_unlogged_block() {
     );
     assert!(first.nodes.iter().all(|n| n.phases.len() == 5));
     // Every participating node carries an input transfer window ending at its last
-    // input-file-written time, at or before its metered execution starts, the small honest gap
-    // between the input write and the worker taking up the proof.
+    // input-file-written time, at or before its execution starts, the small honest gap between the
+    // input write and the worker taking up the proof.
     assert!(first.nodes.iter().all(|n| n.phases[0].is_some()));
     assert!(
         first
             .nodes
             .iter()
             .all(|n| match (&n.phases[0], &n.phases[1]) {
-                (Some(input), Some(metered)) => input.start_ms + input.dur_ms <= metered.start_ms,
+                (Some(input), Some(execution)) =>
+                    input.start_ms + input.dur_ms <= execution.start_ms,
                 _ => false,
             })
     );
-    // Every participating node of a logged block carries a metered execution window that overlaps
-    // its segment envelope, starting at or before the envelope and ending after it begins.
+    // Every participating node of a logged block carries an execution window that overlaps its
+    // segment envelope, starting at or before the envelope and ending after it begins.
     assert!(first.nodes.iter().all(|n| n.phases[1].is_some()));
     assert!(
         first
             .nodes
             .iter()
             .all(|n| match (&n.phases[1], &n.phases[2]) {
-                (Some(metered), Some(segment)) =>
-                    metered.start_ms <= segment.start_ms
-                        && segment.start_ms < metered.start_ms + metered.dur_ms,
+                (Some(execution), Some(segment)) =>
+                    execution.start_ms <= segment.start_ms
+                        && segment.start_ms < execution.start_ms + execution.dur_ms,
                 _ => false,
             })
     );
@@ -710,7 +712,7 @@ fn openvm_blocks_carry_pipeline_items() {
     let b = parse_to_benchmark(&dir).unwrap();
     let kind_count = b.software.zkvm.pipeline.len() as i64;
     // Kind indices of the openvm template, in wire order.
-    let (metered_execution, app_segment, leaf, wrap) = (0, 1, 2, 4);
+    let (execution, fastfwd, app_segment, leaf, wrap) = (0, 1, 2, 3, 5);
 
     for (block, segments) in b.runs[0].blocks.iter().take(2).zip([52i64, 62]) {
         let rows: Vec<&Vec<serde_json::Value>> =
@@ -756,18 +758,26 @@ fn openvm_blocks_carry_pipeline_items() {
             "leaf id out of range in {}",
             block.name
         );
-        // One derived metered-execution row per sent segment, their ids exactly the segment
-        // indices, one metered row for every app segment across the block.
+        // One derived execution row per sent segment, their ids exactly the segment indices, one
+        // execution row for every app segment across the block.
         assert_eq!(
-            ids_of(metered_execution),
+            ids_of(execution),
             (0..segments).collect::<Vec<i64>>(),
-            "metered execution ids in {}",
+            "execution ids in {}",
+            block.name
+        );
+        // One fast-forward row per segment, stored even at zero width, so their ids are exactly the
+        // segment indices.
+        assert_eq!(
+            ids_of(fastfwd),
+            (0..segments).collect::<Vec<i64>>(),
+            "fast-forward ids in {}",
             block.name
         );
         for node in &block.nodes {
             let node_cells: Vec<Vec<i64>> = node.pipeline.iter().map(|r| row_cells(r)).collect();
-            // Each metered-execution row shares its id with an app segment proved on the same node,
-            // the worker having both metered and proved that segment.
+            // Each execution and fast-forward row shares its id with an app segment proved on the
+            // same node, the worker having metered, fast-forwarded, and proved that segment.
             let app_ids: std::collections::BTreeSet<i64> = node
                 .pipeline
                 .iter()
@@ -777,9 +787,11 @@ fn openvm_blocks_carry_pipeline_items() {
             assert!(
                 node.pipeline
                     .iter()
-                    .filter(|r| row_cells(r)[0] == metered_execution)
-                    .all(|r| app_ids.contains(&row_id(r).expect("metered row without an id"))),
-                "a metered execution row's id is not an app segment on the same node in {}",
+                    .filter(|r| row_cells(r)[0] == execution || row_cells(r)[0] == fastfwd)
+                    .all(|r| app_ids.contains(
+                        &row_id(r).expect("execution or fast-forward row without an id")
+                    )),
+                "an execution or fast-forward row's id is not an app segment on the same node in {}",
                 block.name
             );
             // The final wrap runs only on the node that carries the wrap window.

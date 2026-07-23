@@ -1,17 +1,17 @@
 //! Translates parsed openvm jobs into the generic model, building each node's phase windows from
 //! its worker lines and the manager's input fan-out lines.
 //!
-//! Metered execution spans the node's earliest parallel-coordinator announcement to its latest
-//! segment send, the full executor span every prover runs while metering segments and dispatching
-//! them for proving. It overlaps the segment and recursion phases, which are the envelopes of their
-//! kinds' completed items on each node, because the executor meters segments while they prove and
+//! Execution spans the node's earliest parallel-coordinator announcement to its latest segment
+//! send, the full executor span every prover runs while metering segments and dispatching them for
+//! proving. It overlaps the segment and recursion phases, which are the envelopes of their kinds'
+//! completed items on each node, because the executor meters segments while they prove and
 //! recursion consumes segments as they complete. The wrap slot holds the final wrap envelope on the
 //! one node that proved it, which preserves the aggregator convention of the final slot being
 //! non-null on a single node. Input transfer runs from the manager-clock fan-out start to the
 //! node's last worker-clock input-file-written time, both kept in microseconds so a sub-millisecond
-//! fan-out still measures, and so it abuts the node's metered execution. Its span therefore crosses
-//! the two clocks, as the worker-clock windows do against the manager-clock block start, and is
-//! only as aligned as the cluster's NTP.
+//! fan-out still measures, and so it abuts the node's execution. Its span therefore crosses the two
+//! clocks, as the worker-clock windows do against the manager-clock block start, and is only as
+//! aligned as the cluster's NTP.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -25,7 +25,7 @@ use crate::parse_benchmark::input::log::{
 
 /// The phase slots in the openvm preset order.
 const INPUT: usize = 0;
-const METERED_EXECUTION_PHASE: usize = 1;
+const EXECUTION_PHASE: usize = 1;
 const SEGMENT: usize = 2;
 const RECURSION: usize = 3;
 const WRAP_PHASE: usize = 4;
@@ -33,11 +33,12 @@ const PHASE_COUNT: usize = 5;
 
 /// The pipeline kind indices, the single source both the wire template and the worker parser use
 /// so the two cannot drift.
-pub(crate) const METERED_EXECUTION: usize = 0;
-pub(crate) const APP_SEGMENT: usize = 1;
-pub(crate) const LEAF: usize = 2;
-pub(crate) const INTERNAL: usize = 3;
-pub(crate) const WRAP: usize = 4;
+pub(crate) const EXECUTION: usize = 0;
+pub(crate) const FASTFWD: usize = 1;
+pub(crate) const APP_SEGMENT: usize = 2;
+pub(crate) const LEAF: usize = 3;
+pub(crate) const INTERNAL: usize = 4;
+pub(crate) const WRAP: usize = 5;
 
 /// One pipeline kind of the template, in wire order.
 struct Kind {
@@ -48,12 +49,20 @@ struct Kind {
 }
 
 /// The ordered kind template. No openvm kind is paired because every item is one self-contained
-/// span, the work items from their completion lines and metered execution derived per sent segment.
-const KINDS: [Kind; 5] = [
+/// span, the work items from their completion lines, execution derived per sent segment, and
+/// fast-forward taken from each segment's proof line. Fast-forward is the prover's re-execution of
+/// a segment before its proof, so it shares the execution phase.
+const KINDS: [Kind; 6] = [
     Kind {
-        name: "metered_execution",
+        name: "execution",
         label: "Metered Execution",
-        phase: "metered_execution",
+        phase: "execution",
+        paired: false,
+    },
+    Kind {
+        name: "fastfwd",
+        label: "Fast Forward",
+        phase: "execution",
         paired: false,
     },
     Kind {
@@ -158,10 +167,10 @@ fn build_nodes(
             // missing.
             phases[INPUT] =
                 input_window(raw.fanout_start_us, writes.and_then(|m| m.get(id)).copied());
-            // Metered execution runs from the node's earliest parallel-coordinator announcement to
-            // its latest segment send, the full executor span that overlaps the segment phase, and
+            // Execution runs from the node's earliest parallel-coordinator announcement to its
+            // latest segment send, the full executor span that overlaps the segment phase, and
             // stays null when either side is missing.
-            phases[METERED_EXECUTION_PHASE] = window(
+            phases[EXECUTION_PHASE] = window(
                 announcements.and_then(|m| m.get(id)).copied(),
                 sends.and_then(|m| m.get(id)).copied(),
             );
@@ -315,14 +324,14 @@ mod tests {
         assert_eq!(node1.id, "node1");
         // Input transfer ends at the node's last input-file-written time.
         assert_eq!(node1.phases[0], Some((1_000_000, 1_000_060)));
-        // Metered execution runs from the announcement to the last segment send, overlapping the
-        // segment envelope.
+        // Execution runs from the announcement to the last segment send, overlapping the segment
+        // envelope.
         assert_eq!(node1.phases[1], Some((1_000_500, 1_002_800)));
         assert_eq!(node1.phases[2], Some((1_002_000, 1_003_000)));
         assert!(node1.phases[3].is_none() && node1.phases[4].is_none());
 
         // Only the wrap node carries the final slot, the aggregator convention. Without an
-        // announcement or a segment send its metered execution stays null.
+        // announcement or a segment send its execution stays null.
         let node2 = &log.nodes[1];
         assert_eq!(node2.phases[0], Some((1_000_000, 1_000_070)));
         assert!(node2.phases[1].is_none());
@@ -354,9 +363,9 @@ mod tests {
     }
 
     #[test]
-    fn the_metered_execution_window_runs_from_the_announcement_to_the_last_send() {
+    fn the_execution_window_runs_from_the_announcement_to_the_last_send() {
         let mut items: JobItems = BTreeMap::new();
-        // node1 proves two app segments whose envelope the metered window overlaps rather than
+        // node1 proves two app segments whose envelope the execution window overlaps rather than
         // abuts, since the executor keeps sending while the earlier segments prove.
         items.insert(
             "node1".to_string(),
@@ -366,7 +375,7 @@ mod tests {
             ],
         );
         // node2 lost its announcement line and node3 sent no segment, so each side of the window
-        // is missing once and both nodes carry a null metered execution.
+        // is missing once and both nodes carry a null execution.
         items.insert(
             "node2".to_string(),
             vec![span(APP_SEGMENT, 1_001_100, 1_002_000)],

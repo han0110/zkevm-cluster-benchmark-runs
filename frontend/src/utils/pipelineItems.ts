@@ -130,43 +130,45 @@ export function decodePipeline(bench: Benchmark, block: Block, nodes: string[], 
   return { items, phasesUsed, endSec };
 }
 
-// A waterfall row, the items painted on one y in left-to-right order. A merged row leads with a
-// metered_execution bar ahead of the app_segment bar it precedes, a small queue-wait gap between them,
-// while every other row holds its lone item. `startSec` is the earliest item start, the key rows sort on.
+// A waterfall row, the items painted on one y in left-to-right order. A merged row leads with the
+// execution and fast-forward bars ahead of the app_segment bar they precede, the segment's metering
+// and re-execution before its proof, while every other row holds its lone item. `startSec` is the
+// earliest item start, the key rows sort on.
 export interface PipelineRow {
   items: PipelineItem[];
   startSec: number;
 }
 
-// Packs decoded items into waterfall rows. A metered_execution item folds onto the row of the
-// app_segment it leads, matched on the same node by equal metadata id, the segment index both kinds
-// carry. Metered and app_segment share that id space, so the lookup holds app_segment items alone and
-// only metered items fold, the kind disambiguating which of the paired ids leads. A metered item that
-// matches no segment keeps its own row, defensive for logs with dropped lines. Rows sort by earliest
-// start with node then kind tie-breaks, so a merged row takes its metered start and sorts ahead of the
-// segment it leads.
+// Packs decoded items into waterfall rows. The execution and fast-forward items of a segment fold
+// onto the row of the app_segment they lead, matched on the same node by equal metadata id, the
+// segment index all three carry. app_segment holds that id space alone, so the lookup targets it and
+// only the leads fold, the kind disambiguating which id leads. A lead that matches no segment keeps
+// its own row, defensive for logs with dropped lines. Row items sort by start, so metering leads the
+// re-execution leads the proof. Rows sort by earliest start with node then kind tie-breaks, so a
+// merged row takes its execution start and sorts ahead of the segment it leads.
 export function packRows(items: PipelineItem[]): PipelineRow[] {
-  // app_segment items keyed by node and metadata id, the fold target a metered_execution item on the
-  // same node and id claims.
+  // app_segment items keyed by node and metadata id, the fold target an execution or fast-forward
+  // item on the same node and id claims.
   const segmentById = new Map<string, PipelineItem>();
   for (const item of items) {
     if (item.name === 'app_segment' && item.id != null) segmentById.set(`${item.nodeIndex}:${item.id}`, item);
   }
-  const leadOf = new Map<PipelineItem, PipelineItem>();
+  const leadsOf = new Map<PipelineItem, PipelineItem[]>();
   const folded = new Set<PipelineItem>();
   for (const item of items) {
-    if (item.name !== 'metered_execution' || item.id == null) continue;
+    if ((item.name !== 'execution' && item.name !== 'fastfwd') || item.id == null) continue;
     const segment = segmentById.get(`${item.nodeIndex}:${item.id}`);
-    if (segment && !leadOf.has(segment)) {
-      leadOf.set(segment, item);
-      folded.add(item);
-    }
+    if (!segment) continue;
+    const leads = leadsOf.get(segment);
+    if (leads) leads.push(item);
+    else leadsOf.set(segment, [item]);
+    folded.add(item);
   }
   const rows: PipelineRow[] = [];
   for (const item of items) {
     if (folded.has(item)) continue;
-    const lead = leadOf.get(item);
-    const rowItems = lead ? [lead, item] : [item];
+    const leads = leadsOf.get(item);
+    const rowItems = leads ? [...leads, item].sort((a, b) => a.startSec - b.startSec) : [item];
     rows.push({ items: rowItems, startSec: rowItems[0]!.startSec });
   }
   return rows.sort(

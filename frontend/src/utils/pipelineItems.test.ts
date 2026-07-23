@@ -243,110 +243,121 @@ describe('hasPipeline', () => {
 });
 
 describe('packRows', () => {
-  // An openvm-shaped template carrying the metered execution and segment kinds the packer folds.
+  // An openvm-shaped template carrying the execution, fast-forward, and segment kinds the packer folds.
   const openvm = withTemplate([
-    { name: 'metered_execution', label: 'Metered Execution', phase: 'metered_execution', paired: false },
+    { name: 'execution', label: 'Metered Execution', phase: 'execution', paired: false },
+    { name: 'fastfwd', label: 'Fast Forward', phase: 'execution', paired: false },
     { name: 'app_segment', label: 'Segment', phase: 'segment', paired: false },
     { name: 'leaf', label: 'Recursion', phase: 'recursion', paired: false },
   ]);
   const pack = (block: Block) => packRows(decodePipeline(openvm, block, nodes, registry).items);
 
-  it('folds a metered item onto the app segment of the same id on its node', () => {
+  it('folds execution and fast-forward onto the app segment of the same id on its node', () => {
     const rows = pack(
       withNodes([
         node([
-          // The metered item and its worker's segment share the id 0, the segment index.
+          // The execution, fast-forward, and segment items share the id 0, the segment index, and
+          // fold onto one row in start order.
           [0, 100, 50, { id: 0 }],
-          [1, 150, 200, { id: 0 }],
+          [1, 300, 20, { id: 0 }],
+          [2, 320, 200, { id: 0 }],
           // A later segment carries a different id, so it keeps its own row.
-          [1, 400, 100, { id: 16 }],
+          [2, 700, 100, { id: 16 }],
         ]),
       ])
     );
     expect(rows.map(r => r.items.map(i => [i.name, i.id]))).toEqual([
       [
-        ['metered_execution', 0],
+        ['execution', 0],
+        ['fastfwd', 0],
         ['app_segment', 0],
       ],
       [['app_segment', 16]],
     ]);
-    // The merged row takes the metered start, not the segment start it leads into.
+    // The merged row takes the execution start, not the segment start it leads into.
     expect(rows[0]!.startSec).toBe(0.1);
-    expect(rows[1]!.startSec).toBe(0.4);
+    expect(rows[1]!.startSec).toBe(0.7);
+  });
+
+  it('leads with the fast-forward when a segment has no execution item', () => {
+    // A segment whose executor send the lossy capture dropped has no execution item, so its row
+    // leads with the fast-forward.
+    const rows = pack(withNodes([node([[1, 300, 20, { id: 0 }], [2, 320, 200, { id: 0 }]])]));
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['fastfwd', 'app_segment']]);
   });
 
   it('pairs by id when a millisecond tie would cross two segments starting together', () => {
     const rows = pack(
       withNodes([
         node([
-          // Two metered items and two segments share their start moments. The equal-id match pairs #2
-          // with Segment #2 and #3 with Segment #3 rather than crossing.
+          // Two execution items and two segments share their start moments. The equal-id match pairs
+          // #2 with Segment #2 and #3 with Segment #3 rather than crossing.
           [0, 56, 227, { id: 2 }],
           [0, 56, 227, { id: 3 }],
-          [1, 283, 623, { id: 2 }],
-          [1, 283, 592, { id: 3 }],
+          [2, 283, 623, { id: 2 }],
+          [2, 283, 592, { id: 3 }],
         ]),
       ])
     );
     const merged = rows.filter(r => r.items.length === 2).map(r => r.items.map(i => [i.name, i.id]));
     expect(merged).toEqual([
       [
-        ['metered_execution', 2],
+        ['execution', 2],
         ['app_segment', 2],
       ],
       [
-        ['metered_execution', 3],
+        ['execution', 3],
         ['app_segment', 3],
       ],
     ]);
   });
 
-  it('keeps an id-less metered item on its own row', () => {
-    // Without an id the metered item cannot claim a segment, so it stays its own row.
-    const rows = pack(withNodes([node([[0, 100, 50], [1, 150, 200, { id: 0 }]])]));
-    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['metered_execution'], ['app_segment']]);
+  it('keeps an id-less execution item on its own row', () => {
+    // Without an id the execution item cannot claim a segment, so it stays its own row.
+    const rows = pack(withNodes([node([[0, 100, 50], [2, 150, 200, { id: 0 }]])]));
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['execution'], ['app_segment']]);
   });
 
-  it('keeps a metered item on its own row when no segment shares its id', () => {
+  it('keeps an execution item on its own row when no segment shares its id', () => {
     const rows = pack(
       withNodes([
-        // The metered id 0 has no segment on its own node.
+        // The execution id 0 has no segment on its own node.
         node([[0, 100, 50, { id: 0 }]]),
-        // A segment with id 0 sits on another node and must not claim the first node's metered item.
-        node([[1, 150, 100, { id: 0 }]]),
+        // A segment with id 0 sits on another node and must not claim the first node's execution item.
+        node([[2, 150, 100, { id: 0 }]]),
       ])
     );
-    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['metered_execution'], ['app_segment']]);
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['execution'], ['app_segment']]);
   });
 
-  it('folds only a metered item, never another kind sharing a segment id', () => {
+  it('folds only execution and fast-forward, never another kind sharing a segment id', () => {
     const rows = pack(
       withNodes([
         // A leaf carrying id 0 shares the segment index space but is not a lead-in, so it keeps its own
-        // row and only the metered item folds onto Segment #0.
-        node([[2, 100, 50, { id: 0 }], [0, 120, 40, { id: 0 }], [1, 160, 100, { id: 0 }]]),
+        // row and only the execution item folds onto Segment #0.
+        node([[3, 100, 50, { id: 0 }], [0, 120, 40, { id: 0 }], [2, 160, 100, { id: 0 }]]),
       ])
     );
-    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['leaf'], ['metered_execution', 'app_segment']]);
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['leaf'], ['execution', 'app_segment']]);
   });
 
   it('orders merged and lone rows together by earliest start', () => {
     const rows = pack(
       withNodes([
         node([
-          // A merged pair whose metered item starts at 500ms.
+          // A merged pair whose execution item starts at 500ms.
           [0, 500, 100, { id: 0 }],
-          [1, 600, 100, { id: 0 }],
+          [2, 600, 100, { id: 0 }],
           // A lone segment earlier at 200ms and a leaf earlier still at 50ms.
-          [1, 200, 100, { id: 16 }],
-          [2, 50, 10],
+          [2, 200, 100, { id: 16 }],
+          [3, 50, 10],
         ]),
       ])
     );
     expect(rows.map(r => [r.startSec, r.items.map(i => i.name)])).toEqual([
       [0.05, ['leaf']],
       [0.2, ['app_segment']],
-      [0.5, ['metered_execution', 'app_segment']],
+      [0.5, ['execution', 'app_segment']],
     ]);
   });
 });

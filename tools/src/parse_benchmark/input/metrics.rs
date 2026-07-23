@@ -59,10 +59,11 @@ const TIMEOUT_MARKERS: [&str; 2] = ["timed out", "timeout"];
 static WORKER_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"WorkerId\((?P<node>[^)]+)\)").unwrap());
 
-/// Matches a hyphenated uuid, the cluster job id a crash reason carries.
-static UUID_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+/// Matches the cluster job id a crash reason carries: a hyphenated uuid (zisk) or the ere-prefixed
+/// edge proof id (openvm), whose 32 hex digits hold no internal hyphens.
+static JOB_ID_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(
-        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        r"ere-[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
     )
     .unwrap()
 });
@@ -154,7 +155,7 @@ pub fn parse_metric_json(
         (false, Some(reason)) => (
             classify_crash(reason),
             blamed_nodes(reason),
-            UUID_RE.find(reason).map(|m| m.as_str().to_string()),
+            JOB_ID_RE.find(reason).map(|m| m.as_str().to_string()),
         ),
         // A file carrying neither section is treated as a crash with no detail so it never poses as
         // a success.
@@ -521,6 +522,25 @@ mod tests {
         assert_eq!(
             m.crashed_job.as_deref(),
             Some("ed343d4c-ded8-40e7-9bb0-385eb5ad0b03")
+        );
+    }
+
+    #[test]
+    fn extracts_the_ere_job_id_from_an_openvm_crash() {
+        // openvm crash reasons name the proof as an ere- edge id with no internal hyphens, which
+        // the job id regex must recover so the crash can bind to its coordinator log.
+        let text = r#"{
+          "name": "eest__mainnet_25581234__block0",
+          "timestamp_completed": "2026-07-22T04:12:00.000000000Z",
+          "proving": { "crashed": { "reason": "Prove job ere-2b70e62f1f704f2ab54adffc7871155e failed: step 'unknown' failed: Parallel app prove failed: VM exited with non-zero exit code: 1" } }
+        }"#;
+        let m = parse_metric_json("stem", text).unwrap();
+        assert_eq!(m.status, MetricStatus::Crashed);
+        // The reason names no worker, so no node is blamed though the job id is recovered.
+        assert!(m.crashed_nodes.is_empty());
+        assert_eq!(
+            m.crashed_job.as_deref(),
+            Some("ere-2b70e62f1f704f2ab54adffc7871155e")
         );
     }
 

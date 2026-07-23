@@ -93,7 +93,7 @@ pub(crate) static WORKER_LOG_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^worker-(\d+)(?:-gpu(\d+))?\.log$").unwrap());
 
 /// Lists a directory's per-node files whose name `re` matches with a node digit in its first
-/// capture group, each paired with that digit and sorted ascending by it.
+/// capture group, each paired with that digit and sorted ascending by digit then path.
 ///
 /// Shared by the worker-log and telemetry readers, whose node ordering the rest of the document
 /// depends on. A non-UTF-8 name or one `re` rejects is skipped.
@@ -117,6 +117,9 @@ pub(crate) fn worker_files_sorted(
             files.push((digit, path));
         }
     }
-    files.sort_by_key(|(digit, _)| *digit);
+    // Sort by digit then path, not by digit alone. A host's per-GPU files share a digit, so a
+    // digit-only stable sort leaves them in filesystem read_dir order, which varies by machine and
+    // drifts the parsed item order. Ordering by path keeps it deterministic across machines.
+    files.sort();
     Ok(files)
 }
