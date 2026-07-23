@@ -36,6 +36,11 @@ export function BlockPipelineFullscreen({
   onClose: () => void;
 }) {
   const model = useMemo(() => decodePipeline(bench, block, nodes, registry), [bench, block, nodes, registry]);
+  // The CPU/GPU opacity note applies only when some item marks its heavy sides.
+  const hasHeavyMarkers = useMemo(
+    () => model.items.some(item => item.cpuHeavy != null || item.gpuHeavy != null),
+    [model]
+  );
   const [selected, setSelected] = useState<Set<string>>(() => new Set(nodes));
   const shown = useMemo(
     () => (selected.size === nodes.length ? model.items : model.items.filter(item => selected.has(item.nodeId))),
@@ -96,7 +101,9 @@ export function BlockPipelineFullscreen({
         {model.phasesUsed.map(name => (
           <ColorDot key={name} color={registry.color(name)} label={registry.label(name)} />
         ))}
-        <span className="text-faint">Lighter segment is the CPU heavy workload, solid is the GPU one.</span>
+        {hasHeavyMarkers && (
+          <span className="text-faint">Lighter segment is the CPU heavy workload, solid is the GPU one.</span>
+        )}
       </div>
       {hasItems ? (
         <>

@@ -2,6 +2,7 @@
 //! and the log-parsing helpers backends share. The framework names no specific zkVM. A backend
 //! reports its own name on [`ParsedLogs`] and registers itself in [`detect_backend`].
 
+pub mod openvm;
 pub mod zisk;
 
 use std::{borrow::Cow, path::Path, sync::LazyLock};
@@ -33,7 +34,8 @@ pub trait ZkvmParser {
 /// Returns the first registered backend whose detector matches the cluster logs. Registering a new
 /// zkVM is a single entry in this list.
 pub fn detect_backend(logs_dir: &Path) -> Option<Box<dyn ZkvmParser>> {
-    let backends: Vec<Box<dyn ZkvmParser>> = vec![Box::new(zisk::ZiskParser)];
+    let backends: Vec<Box<dyn ZkvmParser>> =
+        vec![Box::new(zisk::ZiskParser), Box::new(openvm::OpenvmParser)];
     backends.into_iter().find(|b| b.detect(logs_dir))
 }
 

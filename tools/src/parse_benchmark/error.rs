@@ -37,6 +37,10 @@ pub enum ParseError {
     )]
     UnrecognizedCoordinatorLine(String),
 
+    /// A worker log line carried a known work-item anchor phrase but matched no known pattern.
+    #[error("unrecognized worker line, the parser may need an update for a new zkVM version: {0}")]
+    UnrecognizedWorkerLine(String),
+
     /// A dmon log was not in the supported columnar format.
     #[error("dmon file {0} is not in the supported columnar (#-header) format")]
     UnsupportedDmonFormat(PathBuf),

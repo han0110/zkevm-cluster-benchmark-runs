@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { fixture } from '@/test/fixture';
 import { buildPhaseRegistry } from '@/utils/phases';
-import { decodePipeline, hasPipeline, rowPitch, rowWindow } from '@/utils/pipelineItems';
-import type { Benchmark, Block, BlockNode, PipelineStep } from '@/types/benchmark';
+import { decodePipeline, hasPipeline, packRows, rowPitch, rowWindow } from '@/utils/pipelineItems';
+import type { Benchmark, Block, BlockNode, PipelineRowMeta, PipelineStep } from '@/types/benchmark';
 
 const registry = buildPhaseRegistry(fixture);
 const nodes = fixture.hardware.nodes;
@@ -17,7 +17,7 @@ const withTemplate = (pipeline: PipelineStep[]): Benchmark => ({
 // A synthetic block over the fixture's crashed block, its nodes swapped for the given ones.
 const withNodes = (blockNodes: BlockNode[]): Block => ({ ...fixtureBlock('0001'), nodes: blockNodes });
 
-const node = (pipeline: number[][], over: Partial<BlockNode> = {}): BlockNode => ({
+const node = (pipeline: (number | PipelineRowMeta)[][], over: Partial<BlockNode> = {}): BlockNode => ({
   phases: [null, null, null, null, null],
   pipeline,
   crashed_ms: null,
@@ -66,8 +66,34 @@ describe('decodePipeline', () => {
     // The item envelope spans its first start to its last end.
     expect(model.items[0]).toMatchObject({ startSec: 0.1, endSec: 0.9, label: 'Pair' });
     expect(model.items[3]).toMatchObject({ startSec: 3, endSec: 3.04, label: 'Single' });
-    // Paired flows from the template so the tooltip can name a lone completed segment's side.
-    expect(model.items.map(i => i.paired)).toEqual([true, true, true, false, false]);
+  });
+
+  it('decodes a trailing metadata object into the id and heavy side markers', () => {
+    const bench = withTemplate([
+      { name: 'single', label: 'Single', phase: 'emulation', paired: false },
+      { name: 'pair', label: 'Pair', phase: 'prove', paired: true },
+    ]);
+    const block = withNodes([
+      node([
+        [0, 100, 200, { id: 12 }],
+        [1, 400, 100, 600, 200, { id: 3, cpu_heavy: 0, gpu_heavy: 1 }],
+        [0, 900, 50],
+        [0, 1200, 40, { id: 'x' as unknown as number }],
+      ]),
+    ]);
+    const model = decodePipeline(bench, block, nodes, registry);
+    // The metadata object does not count toward the row arity, a metadata-free row leaves every
+    // field undefined, and a non-numeric field is dropped rather than surfaced.
+    expect(model.items.map(i => [i.id, i.cpuHeavy, i.gpuHeavy])).toEqual([
+      [12, undefined, undefined],
+      [3, 0, 1],
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+    ]);
+    expect(model.items[1]!.segments).toEqual([
+      { startSec: 0.4, endSec: 0.5 },
+      { startSec: 0.6, endSec: 0.8 },
+    ]);
   });
 
   it('clamps a dangling segment to the crash moment on a crashed node', () => {
@@ -203,15 +229,125 @@ describe('hasPipeline', () => {
     expect(hasPipeline(fixture, fixtureBlock('0001'))).toBe(true);
     // No node of this block carries rows.
     expect(hasPipeline(fixture, fixtureBlock('0002'))).toBe(false);
-    // A template-less document never has a pipeline.
+    // A template-less document never has a pipeline, whether the template is absent or empty.
     const templateless: Benchmark = {
       ...fixture,
       software: { ...fixture.software, zkvm: { ...fixture.software.zkvm, pipeline: undefined } },
     };
     expect(hasPipeline(templateless, fixtureBlock('0001'))).toBe(false);
+    expect(hasPipeline(withTemplate([]), fixtureBlock('0001'))).toBe(false);
     // All-empty row arrays count as no rows.
     const emptied = withNodes([node([]), node([]), node([])]);
     expect(hasPipeline(fixture, emptied)).toBe(false);
+  });
+});
+
+describe('packRows', () => {
+  // An openvm-shaped template carrying the metered execution and segment kinds the packer folds.
+  const openvm = withTemplate([
+    { name: 'metered_execution', label: 'Metered Execution', phase: 'metered_execution', paired: false },
+    { name: 'app_segment', label: 'Segment', phase: 'segment', paired: false },
+    { name: 'leaf', label: 'Recursion', phase: 'recursion', paired: false },
+  ]);
+  const pack = (block: Block) => packRows(decodePipeline(openvm, block, nodes, registry).items);
+
+  it('folds a metered item onto the app segment of the same id on its node', () => {
+    const rows = pack(
+      withNodes([
+        node([
+          // The metered item and its worker's segment share the id 0, the segment index.
+          [0, 100, 50, { id: 0 }],
+          [1, 150, 200, { id: 0 }],
+          // A later segment carries a different id, so it keeps its own row.
+          [1, 400, 100, { id: 16 }],
+        ]),
+      ])
+    );
+    expect(rows.map(r => r.items.map(i => [i.name, i.id]))).toEqual([
+      [
+        ['metered_execution', 0],
+        ['app_segment', 0],
+      ],
+      [['app_segment', 16]],
+    ]);
+    // The merged row takes the metered start, not the segment start it leads into.
+    expect(rows[0]!.startSec).toBe(0.1);
+    expect(rows[1]!.startSec).toBe(0.4);
+  });
+
+  it('pairs by id when a millisecond tie would cross two segments starting together', () => {
+    const rows = pack(
+      withNodes([
+        node([
+          // Two metered items and two segments share their start moments. The equal-id match pairs #2
+          // with Segment #2 and #3 with Segment #3 rather than crossing.
+          [0, 56, 227, { id: 2 }],
+          [0, 56, 227, { id: 3 }],
+          [1, 283, 623, { id: 2 }],
+          [1, 283, 592, { id: 3 }],
+        ]),
+      ])
+    );
+    const merged = rows.filter(r => r.items.length === 2).map(r => r.items.map(i => [i.name, i.id]));
+    expect(merged).toEqual([
+      [
+        ['metered_execution', 2],
+        ['app_segment', 2],
+      ],
+      [
+        ['metered_execution', 3],
+        ['app_segment', 3],
+      ],
+    ]);
+  });
+
+  it('keeps an id-less metered item on its own row', () => {
+    // Without an id the metered item cannot claim a segment, so it stays its own row.
+    const rows = pack(withNodes([node([[0, 100, 50], [1, 150, 200, { id: 0 }]])]));
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['metered_execution'], ['app_segment']]);
+  });
+
+  it('keeps a metered item on its own row when no segment shares its id', () => {
+    const rows = pack(
+      withNodes([
+        // The metered id 0 has no segment on its own node.
+        node([[0, 100, 50, { id: 0 }]]),
+        // A segment with id 0 sits on another node and must not claim the first node's metered item.
+        node([[1, 150, 100, { id: 0 }]]),
+      ])
+    );
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['metered_execution'], ['app_segment']]);
+  });
+
+  it('folds only a metered item, never another kind sharing a segment id', () => {
+    const rows = pack(
+      withNodes([
+        // A leaf carrying id 0 shares the segment index space but is not a lead-in, so it keeps its own
+        // row and only the metered item folds onto Segment #0.
+        node([[2, 100, 50, { id: 0 }], [0, 120, 40, { id: 0 }], [1, 160, 100, { id: 0 }]]),
+      ])
+    );
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([['leaf'], ['metered_execution', 'app_segment']]);
+  });
+
+  it('orders merged and lone rows together by earliest start', () => {
+    const rows = pack(
+      withNodes([
+        node([
+          // A merged pair whose metered item starts at 500ms.
+          [0, 500, 100, { id: 0 }],
+          [1, 600, 100, { id: 0 }],
+          // A lone segment earlier at 200ms and a leaf earlier still at 50ms.
+          [1, 200, 100, { id: 16 }],
+          [2, 50, 10],
+        ]),
+      ])
+    );
+    expect(rows.map(r => [r.startSec, r.items.map(i => i.name)])).toEqual([
+      [0.05, ['leaf']],
+      [0.2, ['app_segment']],
+      [0.5, ['metered_execution', 'app_segment']],
+    ]);
   });
 });
 

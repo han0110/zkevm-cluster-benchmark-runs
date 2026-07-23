@@ -6,15 +6,18 @@
  * an instance, the spacer div holds the full row extent, and the canvas sits absolutely at the
  * window's row offset with one row per pitch, so native scrolling simply reveals it. Scrolling past
  * the overscan hysteresis or changing the zoom remounts the chart at the new window. Each row draws a
- * node-colored gutter cell, its witness segment translucent under its solid compute segment, and an
- * invisible full-pitch hit rect so hair-thin bars stay hoverable. Hovering shows the built-in axis
- * pointer, a faint dashed tick at the hovered time, and reports the hovered moment through onHover
- * for the caller's readout chip. The time axis and zoom slider live in the sibling PipelineTimeStrip,
+ * node-colored gutter cell, its marked CPU heavy segment translucent under its solid siblings, and an
+ * invisible full-pitch hit rect so hair-thin bars stay hoverable. Hovering draws a dashed crosshair
+ * line following the cursor across the plot and reports the hovered moment through onHover for the
+ * caller's readout chip. A raw zrender line drives the crosshair since the built-in axis pointer does
+ * not repaint in place on this static band any more than the painted bars do. The time axis and zoom
+ * slider live in the sibling PipelineTimeStrip,
  * a live instance of built-in components only, whose slider drives the shared zoom window feeding the
  * band's x extent.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { graphic } from 'echarts/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import type {
   CustomSeriesRenderItemAPI,
@@ -22,7 +25,7 @@ import type {
   CustomSeriesRenderItemReturn,
 } from 'echarts';
 import { EChart, type ChartInstance } from '@/components/charts/EChart';
-import { rowPitch, rowWindow, type PipelineItem, type PipelineSegment } from '@/utils/pipelineItems';
+import { packRows, rowPitch, rowWindow, type PipelineItem, type PipelineSegment } from '@/utils/pipelineItems';
 import { hexA, parseDataZoom, sliderOnlyDataZoom } from '@/utils/chartHelpers';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { nodeColorById } from '@/utils/dataVizColors';
@@ -79,8 +82,26 @@ export function PipelineTimeline({
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
   const theme = useThemeColors();
-  const total = items.length;
+  const rows = useMemo(() => packRows(items), [items]);
+  const total = rows.length;
   const { pitch, bar } = rowPitch(total);
+
+  // Flat draw list keyed by row, one entry per bar-carrying item so each bar hovers to its own
+  // tooltip. `rowStart[r]` is the flat index where row r begins, bounding the window slice.
+  const { drawItems, drawRows, rowStart } = useMemo(() => {
+    const drawItems: PipelineItem[] = [];
+    const drawRows: number[] = [];
+    const rowStart: number[] = new Array(rows.length + 1);
+    rows.forEach((row, r) => {
+      rowStart[r] = drawItems.length;
+      for (const item of row.items) {
+        drawItems.push(item);
+        drawRows.push(r);
+      }
+    });
+    rowStart[rows.length] = drawItems.length;
+    return { drawItems, drawRows, rowStart };
+  }, [rows]);
 
   // The items identity is the intended trigger, bumping the revision the remount key reads.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,15 +148,14 @@ export function PipelineTimeline({
   );
 
   // Both axes are hidden and fixed, y to the window's rows so one row unit is exactly one pitch of
-  // the spacer, x to the zoom window in seconds. The x-axis pointer draws the faint dashed hover
-  // tick at the hovered time, interaction-layer rendering that stays clean on the static band.
+  // the spacer, x to the zoom window in seconds.
   const option = useMemo<EChartsCoreOption>(() => {
     const renderItem = (
       params: CustomSeriesRenderItemParams,
       api: CustomSeriesRenderItemAPI
     ): CustomSeriesRenderItemReturn => {
       const row = api.value(0) as number;
-      const item = items[row]!;
+      const item = drawItems[api.value(1) as number]!;
       const plot = params.coordSys as unknown as Plot;
       const top = (api.coord([0, row]) as [number, number])[1];
       const pitchPx = (api.size!([0, 1]) as number[])[1]!;
@@ -160,8 +180,9 @@ export function PipelineTimeline({
         const cx0 = clampX(x0);
         const cx1 = clampX(x1);
         if (cx1 <= cx0) return;
-        // The witness of a pair draws translucent first so its overlapping compute sits solid on top.
-        const fill = item.segments.length === 2 && i === 0 ? hexA(item.color, 0.45) : item.color;
+        // The marked CPU heavy segment draws translucent so an overlapping GPU heavy sibling sits
+        // solid on top, while an unmarked item paints every segment at full opacity.
+        const fill = i === item.cpuHeavy ? hexA(item.color, 0.45) : item.color;
         children.push({
           type: 'rect',
           shape: { x: cx0, y: barY, width: cx1 - cx0, height: bar },
@@ -189,45 +210,34 @@ export function PipelineTimeline({
         show: false,
         min: (endSec * zoom[0]) / 100,
         max: (endSec * zoom[1]) / 100,
-        axisPointer: { show: true, label: { show: false }, lineStyle: { color: theme.faint, type: 'dashed' } },
       },
       yAxis: { type: 'value' as const, inverse: true, show: false, min: win.start, max: win.end },
       tooltip: {
         trigger: 'item' as const,
         confine: true,
         formatter: (p: unknown) => {
-          const item = items[(p as { value: number }).value];
+          const item = drawItems[(p as { value: [number, number] }).value[1]];
           if (!item) return '';
           // A dangling segment never finished, so its row shows an open range from the start and
-          // (unfinished) in place of a duration. An unpaired kind is a single span collapsing into
-          // the total row alone, while a paired kind lists its sides above the total, CPU heavy
-          // then GPU heavy, where a lone completed segment is the GPU side since a cached witness
-          // leaves no CPU segment and a lone dangling open could be either side and stays unnamed.
+          // (unfinished) in place of a duration. A lone unmarked segment collapses into the total
+          // row alone, while a multi-segment or marked item lists its segments above the total,
+          // each named by its CPU or GPU heavy marker and left unnamed without one.
           const segmentWindow = (seg: PipelineSegment): string =>
             seg.dangling
               ? `${formatSeconds(seg.startSec)} -`
               : `${formatSeconds(seg.startSec)} - ${formatSeconds(seg.endSec)}`;
           const segmentDuration = (seg: PipelineSegment): string =>
             seg.dangling ? '(unfinished)' : `(${formatSeconds(seg.endSec - seg.startSec)})`;
-          const rows = item.paired
-            ? item.segments
-                .map((seg, i) =>
-                  tooltipRow(
-                    item.segments.length === 2
-                      ? i === 0
-                        ? 'CPU heavy'
-                        : 'GPU heavy'
-                      : seg.dangling
-                        ? ''
-                        : 'GPU heavy',
-                    segmentWindow(seg),
-                    segmentDuration(seg)
-                  )
-                )
-                .join('') + tooltipRow('total', '', formatSeconds(item.endSec - item.startSec))
-            : tooltipRow('total', segmentWindow(item.segments[0]!), segmentDuration(item.segments[0]!));
+          const sideName = (i: number): string =>
+            i === item.cpuHeavy ? 'CPU heavy' : i === item.gpuHeavy ? 'GPU heavy' : '';
+          const rows =
+            item.segments.length === 1 && sideName(0) === ''
+              ? tooltipRow('total', segmentWindow(item.segments[0]!), segmentDuration(item.segments[0]!))
+              : item.segments
+                  .map((seg, i) => tooltipRow(sideName(i), segmentWindow(seg), segmentDuration(seg)))
+                  .join('') + tooltipRow('total', '', formatSeconds(item.endSec - item.startSec));
           return (
-            `<b>${item.label}</b><br/>` +
+            `<b>${item.label}${item.id != null ? ` #${item.id}` : ''}</b><br/>` +
             `${marker(nodeColorById(item.nodeId))}${item.nodeId}<br/>` +
             `${marker(item.color)}${registry.label(item.phase)}` +
             `<table style="border-collapse:collapse;margin-top:3px">${rows}</table>`
@@ -238,31 +248,62 @@ export function PipelineTimeline({
         {
           type: 'custom' as const,
           z: 3,
-          data: Array.from({ length: win.end - win.start }, (_, i) => win.start + i),
+          data: Array.from({ length: rowStart[win.end]! - rowStart[win.start]! }, (_, i) => {
+            const flat = rowStart[win.start]! + i;
+            return [drawRows[flat]!, flat];
+          }),
           renderItem,
         },
       ],
     };
-  }, [items, win, zoom, endSec, bar, registry, theme]);
+  }, [drawItems, drawRows, rowStart, win, zoom, endSec, bar, registry]);
 
-  // A zrender mousemove reports the hovered time and canvas x for the caller's readout, hitting the
-  // whole canvas rather than only series shapes, with null on leaving the plot or the canvas.
-  // Attached once per live instance, which onReady hands over again after the dev StrictMode recreate.
+  // A zrender mousemove drives the dashed crosshair and reports the hovered time and canvas x for the
+  // caller's readout, hitting the whole canvas rather than only series shapes, hiding the crosshair and
+  // reporting null on leaving the plot or the canvas. The crosshair line sits on its own zlevel so
+  // moving it repaints only its layer and never the painted band. Attached once per live instance,
+  // which onReady hands over again after the dev StrictMode recreate.
   const onHoverRef = useRef(onHover);
   useEffect(() => {
     onHoverRef.current = onHover;
   }, [onHover]);
+  const themeRef = useRef(theme);
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+  const crosshairRef = useRef<graphic.Line | null>(null);
+  useEffect(() => {
+    crosshairRef.current?.setStyle({ stroke: theme.faint });
+  }, [theme]);
   const instanceRef = useRef<ChartInstance | null>(null);
   const handleReady = useCallback((instance: ChartInstance): void => {
     if (instanceRef.current === instance) return;
     instanceRef.current = instance;
     const zr = instance.getZr();
+    const crosshair = new graphic.Line({
+      silent: true,
+      ignore: true,
+      zlevel: 1,
+      style: { stroke: themeRef.current.faint, lineWidth: 1, lineDash: [4, 4] },
+    });
+    crosshairRef.current = crosshair;
+    zr.add(crosshair);
     zr.on('mousemove', (e: { offsetX: number }) => {
       const inPlot = e.offsetX >= PLOT_LEFT && e.offsetX <= instance.getWidth() - PLOT_RIGHT;
       const sec = instance.convertFromPixel({ xAxisIndex: 0 }, e.offsetX);
-      onHoverRef.current(inPlot && Number.isFinite(sec) ? { sec, x: e.offsetX } : null);
+      const hover = inPlot && Number.isFinite(sec) ? { sec, x: e.offsetX } : null;
+      if (hover) {
+        crosshair.setShape({ x1: e.offsetX, y1: 0, x2: e.offsetX, y2: instance.getHeight() });
+        crosshair.show();
+      } else {
+        crosshair.hide();
+      }
+      onHoverRef.current(hover);
     });
-    zr.on('globalout', () => onHoverRef.current(null));
+    zr.on('globalout', () => {
+      crosshair.hide();
+      onHoverRef.current(null);
+    });
   }, []);
 
   // The spacer holds the full row extent for the native scrollbar while the band canvas sits at the

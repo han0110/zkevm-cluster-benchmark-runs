@@ -25,6 +25,8 @@ export interface Hardware {
 export interface Phase {
   name: string;
   label: string;
+  // An overlap phase runs concurrently with its neighbors. Omitted from the wire when false.
+  overlap?: boolean;
 }
 
 // One fine-pipeline item kind, `phase` the owning phase-preset name that colors it. A paired kind
@@ -96,6 +98,14 @@ export interface PhaseWindow {
   dur_ms: number;
 }
 
+// Optional per-item metadata carried as a pipeline row's trailing object. `id` numbers the item within
+// its kind, and cpu_heavy and gpu_heavy name the segment index of each side of a paired item.
+export interface PipelineRowMeta {
+  id?: number;
+  cpu_heavy?: number;
+  gpu_heavy?: number;
+}
+
 // One node's contribution to a block, positioned to match Hardware.nodes. `phases[i]` aligns to
 // Software.zkvm.phases[i] and the aggregate (last) window is non-null only on the aggregating node.
 // `crashed_ms` is the block-start offset where this node was blamed for a crash, null otherwise.
@@ -104,9 +114,9 @@ export interface BlockNode {
   // Fine-pipeline items as variable-arity rows [kind, s, d, s2, d2] with trailing fields absent, times
   // in ms from the block start and `kind` indexing Software.zkvm.pipeline. Arity 3 is one complete
   // segment, arity 5 a witness and compute pair, and arities 2 and 4 leave the last segment dangling
-  // where a crash cut it off. Rows sort by start then kind, and the field is absent when the node
-  // recorded none.
-  pipeline?: number[][];
+  // where a crash cut it off. An item with metadata appends it after the numbers as one trailing
+  // object. Rows sort by start then kind, and the field is absent when the node recorded none.
+  pipeline?: (number | PipelineRowMeta)[][];
   crashed_ms: number | null;
   // How this node ended a crashed block, 'crashed' for the lost node and 'cancelled' for one stopped
   // after a sibling crashed. Null when unmarked.

@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import { StackedPhaseBars, type BarMarker, type BarRow, type BarSegment } from '@/components/charts/StackedPhaseBars';
-import { windowSeconds } from '@/utils/phaseTimings';
+import { traceLabelBaseSec, windowSeconds } from '@/utils/phaseTimings';
 import { resolveCssColorToHex } from '@/utils/color';
 import { msToSec } from '@/utils/format';
 import type { PhaseRegistry } from '@/utils/phases';
@@ -53,6 +53,10 @@ export function Gantt({
       transparent,
     });
 
+    // Overlap phases draw at their absolute windows so their concurrent spans share the row, the
+    // renderer striping any interval two of them cover at once.
+    const overlapPhases = new Set(registry.list.filter(p => p.overlap).map(p => p.name));
+
     return block.nodes.map((node, nodeIndex) => {
       // Each phase window in seconds since block start, from the node's own windows. The aggregate
       // (last) window is null on every node but the aggregator.
@@ -62,6 +66,18 @@ export function Gantt({
       let prevEnd = 0;
       registry.list.forEach((phase, i) => {
         const win = windows[i];
+        if (overlapPhases.has(phase.name)) {
+          // An overlap phase draws at its absolute window, leaving the stack cursor put so a
+          // concurrent sibling can occupy the same span.
+          const start = win ? Math.max(win.start, 0) : 0;
+          const end = win ? Math.max(start, win.end) : start;
+          segments.push(seg(`gap-${phase.name}`, 'gap', 'transparent', 0, true));
+          segments.push({
+            ...seg(phase.name, phase.label, phase.color, end - start),
+            placed: { start, width: end - start },
+          });
+          return;
+        }
         // Every phase emits a gap-and-fill pair so columns align across rows, an absent phase
         // contributing zero-width segments that keep their color. Each window is clamped to the axis
         // origin and to any earlier phase so an overlapping or pre-start window cannot inflate the bar
@@ -100,5 +116,14 @@ export function Gantt({
     });
   }, [block]);
 
-  return <StackedPhaseBars rows={rows} mode="time" height={height} markers={markers} cursorSec={cursorSec} />;
+  return (
+    <StackedPhaseBars
+      rows={rows}
+      mode="time"
+      height={height}
+      markers={markers}
+      cursorSec={cursorSec}
+      pieceLabelBaseSec={traceLabelBaseSec(block, registry)}
+    />
+  );
 }

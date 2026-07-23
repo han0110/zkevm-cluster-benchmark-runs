@@ -1,0 +1,8 @@
+2026-07-21T13:55:05.875756Z  INFO ere_hosts: Running benchmarks with resource=Cluster(RemoteProverConfig { endpoint: "http://localhost:3000", api_key: None }) and action=Prove
+2026-07-21T13:55:07.398198Z  INFO ere_hosts: Running stateless-validator benchmark for input folder: /home/han0110/zkevm-cluster-benchmark-workload/fixtures/mainnet-25580000-1000
+2026-07-21T13:55:07.558436Z  INFO benchmark_runner::runner: Running eest__mainnet_25580000__block0
+2026-07-21T13:56:26.590082Z  INFO benchmark_runner::runner: Saving report eest__mainnet_25580000__block0
+2026-07-21T13:56:26.621670Z  INFO benchmark_runner::runner: Running eest__mainnet_25580001__block0
+2026-07-21T13:56:31.146102Z  INFO benchmark_runner::runner: Saving report eest__mainnet_25580001__block0
+2026-07-21T14:41:38.914640Z  INFO benchmark_runner::runner: Running eest__mainnet_25580606__block0
+2026-07-21T14:41:43.835980Z  INFO benchmark_runner::runner: Saving report eest__mainnet_25580606__block0

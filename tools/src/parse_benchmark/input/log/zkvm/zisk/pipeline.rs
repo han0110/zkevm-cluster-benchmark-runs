@@ -16,7 +16,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use crate::parse_benchmark::input::log::{
-    PipelineDef, PipelineItem, Ts, job_prefix,
+    PipelineDef, PipelineItem, PipelineItemMeta, Ts, job_prefix,
     zkvm::zisk::worker::{has_ts, is_restart_banner, leading_ts},
 };
 
@@ -440,11 +440,13 @@ fn item(open: Open, end: Option<i64>) -> PipelineItem {
             kind: open.kind,
             first: (start, Some(witness_end)),
             second: Some((open.ts, end)),
+            meta: PipelineItemMeta::default(),
         },
         None => PipelineItem {
             kind: open.kind,
             first: (open.ts, end),
             second: None,
+            meta: PipelineItemMeta::default(),
         },
     }
 }
@@ -471,6 +473,7 @@ fn flush(state: JobState, node: &str, pipelines: &mut BTreeMap<String, JobPipeli
         kind,
         first: (start, Some(end)),
         second: None,
+        meta: PipelineItemMeta::default(),
     };
     items.extend(witnesses.into_iter().map(|((kind, _), w)| lone(kind, w)));
     items.extend(

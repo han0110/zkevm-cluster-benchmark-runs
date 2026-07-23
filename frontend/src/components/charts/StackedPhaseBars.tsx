@@ -16,6 +16,7 @@ import { EChart } from '@/components/charts/EChart';
 import { ColorDot } from '@/components/common/ColorDot';
 import { namedAxis, TRACE_CURSOR_DASH_ARRAY, TRACE_CURSOR_DASH_WIDTH, type AxisTooltipParam } from '@/utils/chartHelpers';
 import { contrastText } from '@/utils/color';
+import { placedSegmentPieces, type Span } from '@/utils/phaseTimings';
 
 export interface BarSegment {
   key: string;
@@ -24,6 +25,14 @@ export interface BarSegment {
   seconds: number;
   // Spacer holding the gap between two timed segments so the next bar starts at its real time.
   transparent?: boolean;
+  // Absolute placement in axis units for an overlap phase, drawn full height on the overlay series
+  // outside the stack so concurrent segments share the row, any interval two of them cover at once
+  // filled with the earlier phase's color under stripes of the later's. `frac` is the share the
+  // per-phase label reports, required unless the chart labels per piece.
+  placed?: { start: number; width: number; frac?: number };
+  // Draws the placed bar as the hatched ghost band, the breakdown Rest filler that closes a row to full
+  // width, its label toggling share and seconds like a phase. Set only on an overlap-preset breakdown row.
+  hatched?: boolean;
 }
 
 export interface BarRow {
@@ -33,6 +42,9 @@ export interface BarRow {
   // phase segments, the data-viz convention for absent data.
   absent?: boolean;
   absentLabel?: string;
+  // Measured mean overlap of each consecutive overlap-phase pair, keyed to their segments, labeling each
+  // striped band and adding a paired tooltip row. Present only for an overlap preset's breakdown rows.
+  intersections?: { firstKey: string; secondKey: string; seconds: number; ratio: number }[];
 }
 
 // Point marker on one row at an exact second, such as a crash moment. Rides on its own custom series so
@@ -50,6 +62,90 @@ export interface BarMarker {
 // overlapping. The exact value stays in the hover tooltip.
 const LABEL_MIN_FRACTION = 0.05;
 
+// Image pattern accepted as a zrender graphic fill.
+interface StripeFill {
+  image: HTMLCanvasElement;
+  repeat: 'repeat';
+}
+
+// Canvas tile filling the interval two overlap phases cover at once, the first phase's color as the
+// solid base under thin 45 degree diagonal stripes of the second's, cached per pair. The intersection
+// then meets the first phase's solid piece with no visible boundary and enters the second's as a
+// texture change.
+const stripeFills = new Map<string, StripeFill>();
+function stripeFill(firstColor: string, secondColor: string): StripeFill {
+  const key = `${firstColor}|${secondColor}`;
+  const cached = stripeFills.get(key);
+  if (cached) return cached;
+  const size = 12;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d')!;
+  context.fillStyle = firstColor;
+  context.fillRect(0, 0, size, size);
+  // Stroking the x + y = c diagonals at this width paints the second color exactly where (x + y) mod
+  // size falls in a third of the period, thin seamless stripes over the solid base.
+  context.strokeStyle = secondColor;
+  context.lineWidth = size / (3 * Math.SQRT2);
+  context.beginPath();
+  for (const diagonal of [size / 4, (5 * size) / 4, (9 * size) / 4]) {
+    context.moveTo(-size, diagonal + size);
+    context.lineTo(diagonal + size, -size);
+  }
+  context.stroke();
+  const fill: StripeFill = { image: canvas, repeat: 'repeat' };
+  stripeFills.set(key, fill);
+  return fill;
+}
+
+// Canvas tile matching the did-not-participate ghost band, a faint grey base under thin diagonal grey
+// stripes, cached in its solid and emphasized shades so a hovered Rest band lifts like a phase bar.
+function hatchFill(emphasis: boolean): StripeFill {
+  const key = emphasis ? '__hatch_emphasis__' : '__hatch__';
+  const cached = stripeFills.get(key);
+  if (cached) return cached;
+  const size = 12;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d')!;
+  context.fillStyle = emphasis ? 'rgba(127,127,127,0.18)' : 'rgba(127,127,127,0.10)';
+  context.fillRect(0, 0, size, size);
+  context.strokeStyle = emphasis ? 'rgba(170,170,170,0.6)' : 'rgba(150,150,150,0.45)';
+  context.lineWidth = 1;
+  context.beginPath();
+  for (const diagonal of [size / 4, (5 * size) / 4, (9 * size) / 4]) {
+    context.moveTo(-size, diagonal + size);
+    context.lineTo(diagonal + size, -size);
+  }
+  context.stroke();
+  const fill: StripeFill = { image: canvas, repeat: 'repeat' };
+  stripeFills.set(key, fill);
+  return fill;
+}
+
+// Brightens a hex color the way ECharts lifts a series fill on hover, each channel scaled by 1.1 and
+// clamped, so a placed piece emphasizes to the shade a stacked bar segment does.
+function liftHex(hex: string): string {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!match) return hex;
+  const channel = (pair: string): string =>
+    Math.min(255, Math.floor(parseInt(pair, 16) * 1.1))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${channel(match[1]!)}${channel(match[2]!)}${channel(match[3]!)}`;
+}
+
+// Round tooltip marker matching the ECharts axis-tooltip dot, taking any CSS background so the
+// striped intersection rows carry a striped dot.
+const markerDot = (background: string): string =>
+  `<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background:${background};"></span>`;
+
+// CSS twin of the stripe fill for tooltip markers, the first color solid under thin stripes of the second.
+const stripedMarker = (firstColor: string, secondColor: string): string =>
+  markerDot(`repeating-linear-gradient(45deg,${firstColor},${firstColor} 3px,${secondColor} 3px,${secondColor} 4.5px)`);
+
 interface Datum {
   value: number;
   sec: number;
@@ -60,6 +156,12 @@ interface Datum {
 interface StackedPhaseBarsProps {
   rows: BarRow[];
   mode: 'share' | 'time';
+  // Proving seconds behind the trace percent labels, set only for the block trace of an overlap
+  // preset. When set the chart labels per piece, every solid or striped placed piece and every
+  // stacked segment reporting its duration over this base so a row's percents sum toward 100, and
+  // the tooltip lists the same pieces. Null marks a block reporting no proving time, so piece labels
+  // read in seconds. When absent each placed phase labels once with its `frac`.
+  pieceLabelBaseSec?: number | null;
   // Point markers on specific rows, meaningful only in time mode where the axis is seconds.
   markers?: BarMarker[];
   // A full-height dashed cursor line at this second, meaningful only in time mode. Drives the
@@ -69,7 +171,7 @@ interface StackedPhaseBarsProps {
   height?: number;
 }
 
-export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 26, height }: StackedPhaseBarsProps) {
+export function StackedPhaseBars({ rows, mode, pieceLabelBaseSec, markers, cursorSec, rowHeight = 26, height }: StackedPhaseBarsProps) {
   const [showSeconds, setShowSeconds] = useState(false);
 
   // The base option without the hovered-log cursor, memoized on the inputs that shape the bars, the
@@ -84,11 +186,18 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
     // Slot definitions come from the first row because every row carries the same ordered segments.
     const slots = rows[0]?.segments ?? [];
     const activeTotal = (r: BarRow): number => r.segments.reduce((sum, s) => sum + (s.transparent ? 0 : s.seconds), 0) || 1;
-    const fullTotal = (r: BarRow): number => r.segments.reduce((sum, s) => sum + s.seconds, 0);
-    // The axis must reach the latest of the bar ends and any marker so a crash marker past the last
-    // partial phase lands on the chart not off its right edge.
+    // A placed segment leaves the stack, so it counts toward the axis by its own end not the row sum.
+    const fullTotal = (r: BarRow): number => r.segments.reduce((sum, s) => sum + (s.placed ? 0 : s.seconds), 0);
+    const placedEnds = rows.flatMap(r => r.segments.flatMap(s => (s.placed ? [s.placed.start + s.placed.width] : [])));
+    // The axis must reach the latest of the bar ends, placed ends, and any marker so a crash marker past
+    // the last partial phase lands on the chart not off its right edge.
     const markerSecs = mode === 'time' ? (markers ?? []).map(m => m.seconds) : [];
-    const axisMax = mode === 'share' ? 1 : Math.max(0.1, ...rows.map(fullTotal), ...markerSecs);
+    const axisMax = mode === 'share' ? 1 : Math.max(0.1, ...rows.map(fullTotal), ...placedEnds, ...markerSecs);
+
+    // Piece labeling engages whenever a base is supplied, the block-trace semantics. A supplied but
+    // null base marks a block reporting no proving time, so its percent labels give way to seconds.
+    const pieceMode = pieceLabelBaseSec !== undefined;
+    const secondsOnly = pieceMode && !pieceLabelBaseSec;
 
     const series = slots.map((slot, i) => ({
       name: slot.label,
@@ -103,14 +212,16 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
           if (p.data.transparent) return '';
           const widthFrac = mode === 'share' ? p.value : p.value / axisMax;
           if (widthFrac < LABEL_MIN_FRACTION) return '';
-          return showSeconds ? `${p.data.sec.toFixed(2)}s` : `${Math.round(p.data.frac * 100)}%`;
+          return showSeconds || secondsOnly ? `${p.data.sec.toFixed(2)}s` : `${Math.round(p.data.frac * 100)}%`;
         },
       },
       data: rows.map(r => {
         const s = r.segments[i];
         const sec = s?.seconds ?? 0;
-        const frac = sec / activeTotal(r);
-        return { value: mode === 'share' ? frac : sec, sec, frac, transparent: !!s?.transparent };
+        const frac = pieceMode ? (pieceLabelBaseSec ? sec / pieceLabelBaseSec : 0) : s?.placed?.frac ?? sec / activeTotal(r);
+        // A placed segment contributes zero to the stack, keeping its real figures for the per-phase
+        // tooltip while the overlay series draws its bar at the absolute position.
+        return { value: s?.placed ? 0 : mode === 'share' ? frac : sec, sec, frac, transparent: !!s?.transparent };
       }),
     }));
 
@@ -142,6 +253,189 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
             },
           ]
         : [];
+
+    // Placed segments draw as absolutely positioned full-height bars on a custom series over the stack,
+    // solid where one phase runs alone and striped where two run at once. Their figures stay in the
+    // per-phase tooltip through their zero-width stack entries, and the series stays clickable so the
+    // percent-and-seconds toggle works where the stack holds no visible bar.
+    const placedSegments = rows.flatMap((r, row) =>
+      r.segments.flatMap(s => {
+        if (!s.placed || s.placed.width <= 0) return [];
+        return [{ row, key: s.key, label: s.label, color: s.color, sec: s.seconds, frac: s.placed.frac, start: s.placed.start, end: s.placed.start + s.placed.width, hatched: !!s.hatched }];
+      })
+    );
+    // Each segment keeps the parts no row sibling covers as solid pieces and takes a striped piece for
+    // its intersection with each earlier sibling, so every interval is painted exactly once. The
+    // per-phase label sits on the widest solid piece, falling back to the whole span when siblings
+    // cover it all.
+    const placedDraws = placedSegments.map(segment => {
+      const rowSegments = placedSegments.filter(p => p.row === segment.row);
+      const pieces = placedSegmentPieces(rowSegments, rowSegments.indexOf(segment));
+      const striped = pieces.striped.map(({ span, first }) => ({ span, first, fill: stripeFill(first.color, segment.color) }));
+      const label = pieces.solid.length
+        ? pieces.solid.reduce((widest, piece) => (piece.end - piece.start > widest.end - widest.start ? piece : widest))
+        : { start: segment.start, end: segment.end };
+      return { solid: pieces.solid, striped, label };
+    });
+    // Under piece labels the tooltip lists the same pieces the bars label, each placed phase reduced
+    // to its solid remainder plus one row per striped intersection named for both phases, so the
+    // listed figures partition the row and sum toward the whole like the labels.
+    const pieceTooltips = pieceMode
+      ? rows.map((r, rowIndex) => {
+          const rowPlaced = placedSegments.flatMap((p, i) => (p.row === rowIndex ? [{ segment: p, draw: placedDraws[i]! }] : []));
+          return r.segments.flatMap(s => {
+            if (s.transparent) return [];
+            // A share-normalized placement reads a piece's seconds from its width through the phase's own
+            // seconds-per-fraction scale and its share from the row base, so the listed figures partition
+            // the row like the labels. A seconds-axis trace placement keeps its width as seconds against a
+            // null-safe base.
+            const secPerFrac = s.placed?.frac ? s.seconds / s.placed.frac : 1;
+            const entry = (marker: string, name: string, width: number) => ({
+              marker,
+              name,
+              sec: width * secPerFrac,
+              share: pieceLabelBaseSec != null ? width / pieceLabelBaseSec : null,
+            });
+            const placed = rowPlaced.find(p => p.segment.key === s.key);
+            if (!placed) return [entry(markerDot(s.color), s.label, s.seconds)];
+            return [
+              ...placed.draw.striped.map(piece =>
+                entry(stripedMarker(piece.first.color, s.color), `${piece.first.label} + ${s.label}`, piece.span.end - piece.span.start)
+              ),
+              entry(markerDot(s.color), s.label, placed.draw.solid.reduce((sum, piece) => sum + (piece.end - piece.start), 0)),
+            ];
+          });
+        })
+      : [];
+    // The breakdown tooltip gains one striped row per hovered row that carries a measured overlap, named
+    // for both overlap phases and colored with their striped marker, mirroring the trace chart's pairing.
+    const overlapTooltips = !pieceMode
+      ? rows.map(r =>
+          (r.intersections ?? []).flatMap(x => {
+            const first = r.segments.find(s => s.key === x.firstKey);
+            const second = r.segments.find(s => s.key === x.secondKey);
+            return first && second
+              ? [{ marker: stripedMarker(first.color, second.color), name: `${first.label} + ${second.label}`, sec: x.seconds, ratio: x.ratio }]
+              : [];
+          })
+        )
+      : [];
+    const placedSeries = placedSegments.length
+      ? [
+          {
+            type: 'custom' as const,
+            z: 3,
+            encode: { x: 0, y: 1 },
+            data: placedSegments.map(p => [p.start, p.row]),
+            renderItem: (
+              params: CustomSeriesRenderItemParams,
+              api: CustomSeriesRenderItemAPI
+            ): CustomSeriesRenderItemReturn => {
+              const segment = placedSegments[params.dataIndex];
+              const draw = placedDraws[params.dataIndex];
+              if (!segment || !draw) return { type: 'group', children: [] };
+              const y = (api.coord([segment.start, segment.row]) as [number, number])[1];
+              // The stacked bar series leave sizing to the default bar layout, one stack column on
+              // the category band, so the same one-column layout gives the exact stacked-bar height
+              // and vertical offset.
+              const layout = api.barLayout({ count: 1 })![0]!;
+              const top = y + layout.offset;
+              const barHeight = layout.width;
+              const xAt = (value: number): number => (api.coord([value, segment.row]) as [number, number])[0];
+              // Piece edges snap to device pixels, so abutting solid and striped rects meet on the
+              // same pixel without an antialiased seam.
+              const devicePixels = window.devicePixelRatio || 1;
+              const snap = (value: number): number => Math.round(value * devicePixels) / devicePixels;
+              // Each piece carries an emphasis fill so hovering the placed bar, solid or striped,
+              // lifts it to the same brighter shade a stacked bar segment gets on hover.
+              const rect = (span: Span, fill: string | StripeFill, emphasisFill: string | StripeFill) => {
+                const left = snap(xAt(span.start));
+                const right = snap(xAt(span.end));
+                return {
+                  type: 'rect' as const,
+                  shape: { x: left, y: top, width: Math.max(0, right - left), height: barHeight },
+                  style: { fill },
+                  emphasis: { style: { fill: emphasisFill } },
+                };
+              };
+              const fits = (span: Span): boolean => (span.end - span.start) / axisMax >= LABEL_MIN_FRACTION;
+              const textAt = (text: string, span: Span, onColor: string) => ({
+                type: 'text' as const,
+                style: {
+                  text,
+                  x: (xAt(span.start) + xAt(span.end)) / 2,
+                  y,
+                  fill: contrastText(onColor),
+                  fontSize: 11,
+                  align: 'center' as const,
+                  verticalAlign: 'middle' as const,
+                },
+              });
+              // The Rest filler reports its share or seconds like a phase, in a muted fill legible on the
+              // faint hatch.
+              const hatchedLabel = (span: Span, text: string) => ({
+                type: 'text' as const,
+                style: {
+                  text,
+                  x: (xAt(span.start) + xAt(span.end)) / 2,
+                  y,
+                  fill: 'rgba(200,200,200,0.95)',
+                  fontSize: 11,
+                  align: 'center' as const,
+                  verticalAlign: 'middle' as const,
+                },
+              });
+              // Piece labels report each solid or striped piece on its own over the base, per-phase
+              // labels report the whole segment once on its label span. A share-normalized placement
+              // carries its seconds through a per-fraction scale so a piece width reads real seconds,
+              // while a seconds-axis trace placement keeps its width as seconds.
+              const secPerFrac = segment.frac != null && segment.frac > 0 ? segment.sec / segment.frac : 1;
+              const pieceText = (span: Span): string =>
+                showSeconds || secondsOnly
+                  ? `${((span.end - span.start) * secPerFrac).toFixed(2)}s`
+                  : `${Math.round(((span.end - span.start) / pieceLabelBaseSec!) * 100)}%`;
+              // The overlay's own breakdown row carries the measured overlap bands, matched to each
+              // striped piece by its pair keys so the region reads its real concurrency figure.
+              const overlaps = rows[segment.row]?.intersections ?? [];
+              const texts = segment.hatched
+                ? fits(draw.label)
+                  ? [hatchedLabel(draw.label, showSeconds ? `${segment.sec.toFixed(2)}s` : `${Math.round(segment.frac! * 100)}%`)]
+                  : []
+                : pieceMode
+                ? [
+                    ...draw.solid.filter(fits).map(piece => textAt(pieceText(piece), piece, segment.color)),
+                    ...draw.striped.filter(piece => fits(piece.span)).map(piece => textAt(pieceText(piece.span), piece.span, piece.first.color)),
+                  ]
+                : [
+                    ...(fits(draw.label)
+                      ? [textAt(showSeconds ? `${segment.sec.toFixed(2)}s` : `${Math.round(segment.frac! * 100)}%`, draw.label, segment.color)]
+                      : []),
+                    // The striped span's width is layout-derived from the placed bars, so its label
+                    // instead reports the measured mean overlap, the real concurrency the data holds.
+                    ...draw.striped.flatMap(piece => {
+                      const band = overlaps.find(o => o.firstKey === piece.first.key && o.secondKey === segment.key);
+                      return band && fits(piece.span)
+                        ? [textAt(showSeconds ? `${band.seconds.toFixed(2)}s` : `${Math.round(band.ratio * 100)}%`, piece.span, piece.first.color)]
+                        : [];
+                    }),
+                  ];
+              const emphasisColor = liftHex(segment.color);
+              const solidFill = segment.hatched ? hatchFill(false) : segment.color;
+              const solidEmphasis = segment.hatched ? hatchFill(true) : emphasisColor;
+              return {
+                type: 'group',
+                children: [
+                  ...draw.solid.map(piece => rect(piece, solidFill, solidEmphasis)),
+                  ...draw.striped.map(piece =>
+                    rect(piece.span, piece.fill, stripeFill(liftHex(piece.first.color), emphasisColor))
+                  ),
+                  ...texts,
+                ],
+              };
+            },
+          },
+        ]
+      : [];
 
     // Each marker is a dashed vertical line across its row at the exact second, labelled above. Rides on
     // a silent custom series so it overlays the bars without joining the stack or tooltip.
@@ -224,19 +518,25 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
           if (!head) return '';
           // Rows laid out as a borderless table so seconds and share line up in their own right-aligned
           // columns rather than trailing each variable-width phase name.
-          const cells = arr
-            .filter(p => p.data && typeof p.data.sec === 'number' && !p.data.transparent)
-            .map(
-              p =>
-                `<tr><td>${p.marker}${p.seriesName}</td><td style="text-align:right;padding-left:14px;white-space:nowrap">${p.data.sec.toFixed(2)} s</td><td style="text-align:right;padding-left:10px;white-space:nowrap">${Math.round(p.data.frac * 100)}%</td></tr>`
-            )
-            .join('');
+          const cell = (marker: string, name: string, sec: number, share: string) =>
+            `<tr><td>${marker}${name}</td><td style="text-align:right;padding-left:14px;white-space:nowrap">${sec.toFixed(2)} s</td><td style="text-align:right;padding-left:10px;white-space:nowrap">${share}</td></tr>`;
+          const overlapRows = pieceMode ? [] : overlapTooltips[arr[0]?.dataIndex ?? -1] ?? [];
+          const cells = pieceMode
+            ? (pieceTooltips[arr[0]?.dataIndex ?? -1] ?? [])
+                .map(piece => cell(piece.marker, piece.name, piece.sec, piece.share != null ? `${Math.round(piece.share * 100)}%` : ''))
+                .join('')
+            : [
+                ...arr
+                  .filter(p => p.data && typeof p.data.sec === 'number' && !p.data.transparent)
+                  .map(p => cell(p.marker, p.seriesName, p.data.sec, `${Math.round(p.data.frac * 100)}%`)),
+                ...overlapRows.map(o => cell(o.marker, o.name, o.sec, `${Math.round(o.ratio * 100)}%`)),
+              ].join('');
           return `${head}<table style="border-collapse:collapse;margin-top:3px">${cells}</table>`;
         },
       },
-      series: [...series, ...absentSeries, ...markerSeries],
+      series: [...series, ...absentSeries, ...placedSeries, ...markerSeries],
     };
-  }, [rows, mode, markers, showSeconds]);
+  }, [rows, mode, pieceLabelBaseSec, markers, showSeconds]);
 
   // A bright full-height dashed cursor at the hovered second, drawn on a silent custom series so it
   // spans the whole grid without a markLine component or joining the stack, with a time badge at the
@@ -308,7 +608,7 @@ export function StackedPhaseBars({ rows, mode, markers, cursorSec, rowHeight = 2
     [base, cursorSeries]
   );
 
-  const legend = (rows[0]?.segments ?? []).filter(s => !s.transparent);
+  const legend = (rows[0]?.segments ?? []).filter(s => !s.transparent && !s.hatched);
   return (
     <>
       <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted">

@@ -85,11 +85,12 @@ impl Sources {
     }
 }
 
-/// Matches a worker-N.log file name, capturing the node digit and excluding the worker-N-dmon.log
+/// Matches a worker-N.log or per-GPU worker-N-gpuG.log file name, capturing the node digit in the
+/// first group and the optional GPU index in the second, and excluding the worker-N-dmon.log
 /// telemetry files. Shared by the raw-line extractor and the structured worker-log parser, the two
-/// readers that enumerate worker-N.log, so the file selection stays identical between them.
+/// readers that enumerate worker logs, so the file selection stays identical between them.
 pub(crate) static WORKER_LOG_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r"^worker-(\d+)\.log$").unwrap());
+    LazyLock::new(|| regex::Regex::new(r"^worker-(\d+)(?:-gpu(\d+))?\.log$").unwrap());
 
 /// Lists a directory's per-node files whose name `re` matches with a node digit in its first
 /// capture group, each paired with that digit and sorted ascending by it.

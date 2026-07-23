@@ -71,6 +71,10 @@ pub struct Guest {
 pub struct Phase {
     pub name: String,
     pub label: String,
+    /// An overlap phase runs concurrently with its neighbors. Omitted from the wire when false so
+    /// older documents round-trip unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub overlap: bool,
 }
 
 /// One fine-pipeline item kind. A paired kind may carry a witness segment and a compute segment in
@@ -143,10 +147,13 @@ pub struct BlockNode {
     /// segment, arity 5 a witness and compute pair, and arities 2 and 4 leave the last segment
     /// dangling where a crash cut it off. A paired kind whose witness completed with no compute
     /// left to claim it, because none opened before a crash or its compute closed before the
-    /// witness did, also serializes as arity 3, indistinguishable from a compute-only row. Rows
-    /// sort by start then kind, and the field is omitted when empty.
+    /// witness did, also serializes as arity 3, indistinguishable from a compute-only row. An item
+    /// with metadata appends it after the integers as one trailing object of the optional keys id,
+    /// the item number within its kind, and cpu_heavy and gpu_heavy, the segment index of each
+    /// side of a pair, while an item without metadata stays a pure integer row. Rows sort by start
+    /// then kind, and the field is omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pipeline: Vec<Vec<i64>>,
+    pub pipeline: Vec<Vec<Value>>,
     pub crashed_ms: Option<i64>,
     /// How this node ended on a crashed block, "crashed" for the lost node or "cancelled" for a
     /// sibling-stopped one. Null when the node has no crash marker.
@@ -220,7 +227,25 @@ pub struct Telemetry {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_benchmark::output::schema::{BlockNode, Zkvm};
+    use crate::parse_benchmark::output::schema::{BlockNode, Phase, Zkvm};
+
+    #[test]
+    fn a_phase_serializes_overlap_only_when_true() {
+        let wire = r#"{"name":"input","label":"Input Transfer"}"#;
+        let phase: Phase = serde_json::from_str(wire).unwrap();
+        assert!(!phase.overlap);
+        assert_eq!(serde_json::to_string(&phase).unwrap(), wire);
+
+        let overlapping = Phase {
+            name: "segment".to_string(),
+            label: "Segment".to_string(),
+            overlap: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&overlapping).unwrap(),
+            r#"{"name":"segment","label":"Segment","overlap":true}"#
+        );
+    }
 
     #[test]
     fn a_zkvm_without_a_pipeline_template_round_trips_unchanged() {
@@ -235,6 +260,14 @@ mod tests {
         let wire = r#"{"phases":[null],"crashed_ms":null,"crash_kind":null,"participated":true}"#;
         let node: BlockNode = serde_json::from_str(wire).unwrap();
         assert!(node.pipeline.is_empty());
+        assert_eq!(serde_json::to_string(&node).unwrap(), wire);
+    }
+
+    #[test]
+    fn a_pipeline_row_round_trips_its_trailing_metadata_object() {
+        // A metadata-free row stays pure integers while a trailing object rides its row untouched.
+        let wire = r#"{"phases":[null],"pipeline":[[0,306,1538],[0,412,1490,{"id":12,"cpu_heavy":0,"gpu_heavy":1}]],"crashed_ms":null,"crash_kind":null,"participated":true}"#;
+        let node: BlockNode = serde_json::from_str(wire).unwrap();
         assert_eq!(serde_json::to_string(&node).unwrap(), wire);
     }
 }

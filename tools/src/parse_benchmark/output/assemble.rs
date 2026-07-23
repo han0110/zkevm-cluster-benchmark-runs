@@ -8,7 +8,10 @@ use crate::parse_benchmark::{
     input::{
         Sources,
         dmon::DmonRow,
-        log::{Log, LogStatus, PipelineItem, Ts, job_prefix, lines::RawLine, zkvm::ParsedLogs},
+        log::{
+            Log, LogStatus, PipelineItem, PipelineItemMeta, Ts, job_prefix, lines::RawLine,
+            zkvm::ParsedLogs,
+        },
         metrics::{MetricBlock, MetricStatus},
     },
     output::schema::{
@@ -200,6 +203,7 @@ pub fn assemble(
                     .map(|p| Phase {
                         name: p.name.clone(),
                         label: p.label.clone(),
+                        overlap: p.overlap,
                     })
                     .collect(),
                 pipeline: pipeline
@@ -387,26 +391,46 @@ fn build_block(
 
 /// Encodes a node's pipeline items as wire rows rebased to the block start, each [kind, s, d, s2,
 /// d2] truncated where a segment dangles, so a dangling end is carried by arity rather than a
-/// sentinel. Rows sort by start then kind.
-fn pipeline_rows(items: &[PipelineItem], start_abs: i64) -> Vec<Vec<i64>> {
-    let mut rows: Vec<Vec<i64>> = items
+/// sentinel. An item's metadata follows its integers as one trailing object, absent entirely on a
+/// metadata-free item, which therefore serializes as a pure integer row. Rows sort by start then
+/// kind.
+fn pipeline_rows(items: &[PipelineItem], start_abs: i64) -> Vec<Vec<Value>> {
+    let mut sorted: Vec<&PipelineItem> = items.iter().collect();
+    sorted.sort_by_key(|item| (item.first.0, item.kind));
+    sorted
         .iter()
         .map(|item| {
-            let mut row = vec![item.kind as i64, item.first.0 - start_abs];
+            let mut cells = vec![item.kind as i64, item.first.0 - start_abs];
             if let Some(end) = item.first.1 {
-                row.push(end - item.first.0);
+                cells.push(end - item.first.0);
                 if let Some((start2, end2)) = item.second {
-                    row.push(start2 - start_abs);
+                    cells.push(start2 - start_abs);
                     if let Some(end2) = end2 {
-                        row.push(end2 - start2);
+                        cells.push(end2 - start2);
                     }
                 }
             }
+            let mut row: Vec<Value> = cells.into_iter().map(Value::from).collect();
+            row.extend(metadata_object(item.meta));
             row
         })
-        .collect();
-    rows.sort_by_key(|row| (row[1], row[0]));
-    rows
+        .collect()
+}
+
+/// The trailing metadata object of an item, holding the present fields among id, cpu_heavy, and
+/// gpu_heavy, or None when every field is absent.
+fn metadata_object(meta: PipelineItemMeta) -> Option<Value> {
+    let mut map = serde_json::Map::new();
+    if let Some(id) = meta.id {
+        map.insert("id".to_string(), id.into());
+    }
+    if let Some(index) = meta.cpu_heavy {
+        map.insert("cpu_heavy".to_string(), index.into());
+    }
+    if let Some(index) = meta.gpu_heavy {
+        map.insert("gpu_heavy".to_string(), index.into());
+    }
+    (!map.is_empty()).then(|| Value::Object(map))
 }
 
 /// The kept cluster-log lines within a block's proving window, each rebased to a microsecond offset
@@ -755,13 +779,14 @@ fn match_blocks_to_logs(logs: &[Log], blocks: &[MetricBlock]) -> Vec<Option<usiz
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
+    use serde_json::{Value, json};
 
     use crate::parse_benchmark::{
         input::{
             dmon::DmonRow,
             log::{
-                Log, LogNode, LogStatus, NodeEnd, NodeEndKind, PipelineItem, Ts, lines::RawLine,
+                Log, LogNode, LogStatus, NodeEnd, NodeEndKind, PipelineItem, PipelineItemMeta, Ts,
+                lines::RawLine,
             },
             metrics::{MetricBlock, MetricStatus},
         },
@@ -1082,6 +1107,20 @@ mod tests {
         assert_eq!(block.nodes[0].crash_kind.as_deref(), Some("crashed"));
     }
 
+    /// A metadata-free pipeline item of the given kind and segments.
+    fn item(
+        kind: usize,
+        first: (i64, Option<i64>),
+        second: Option<(i64, Option<i64>)>,
+    ) -> PipelineItem {
+        PipelineItem {
+            kind,
+            first,
+            second,
+            meta: PipelineItemMeta::default(),
+        }
+    }
+
     #[test]
     fn pipeline_items_rebase_and_encode_by_arity() {
         let at = |s: &str| Ts::parse(&format!("2026-01-01T00:00:{s}Z")).unwrap();
@@ -1096,26 +1135,18 @@ mod tests {
             id: "node1".to_string(),
             phases: vec![None],
             items: vec![
-                PipelineItem {
-                    kind: 0,
-                    first: (start + 100, Some(start + 300)),
-                    second: None,
-                },
-                PipelineItem {
-                    kind: 7,
-                    first: (start + 400, Some(start + 600)),
-                    second: Some((start + 700, Some(start + 900))),
-                },
-                PipelineItem {
-                    kind: 2,
-                    first: (start + 1000, Some(start + 1100)),
-                    second: Some((start + 1200, None)),
-                },
-                PipelineItem {
-                    kind: 8,
-                    first: (start + 1300, None),
-                    second: None,
-                },
+                item(0, (start + 100, Some(start + 300)), None),
+                item(
+                    7,
+                    (start + 400, Some(start + 600)),
+                    Some((start + 700, Some(start + 900))),
+                ),
+                item(
+                    2,
+                    (start + 1000, Some(start + 1100)),
+                    Some((start + 1200, None)),
+                ),
+                item(8, (start + 1300, None), None),
             ],
             end: None,
         }];
@@ -1131,13 +1162,13 @@ mod tests {
         );
         // Each state encodes by arity, the dangling ends carried by truncation.
         assert_eq!(
-            block.nodes[0].pipeline,
-            vec![
-                vec![0, 100, 200],
-                vec![7, 400, 200, 700, 200],
-                vec![2, 1000, 100, 1200],
-                vec![8, 1300],
-            ]
+            serde_json::to_value(&block.nodes[0].pipeline).unwrap(),
+            json!([
+                [0, 100, 200],
+                [7, 400, 200, 700, 200],
+                [2, 1000, 100, 1200],
+                [8, 1300],
+            ])
         );
     }
 
@@ -1145,26 +1176,47 @@ mod tests {
     fn pipeline_rows_sort_by_start_then_kind() {
         // Items arrive in close order rather than start order, and two rows share a start.
         let items = vec![
-            PipelineItem {
-                kind: 5,
-                first: (100, Some(150)),
-                second: None,
-            },
-            PipelineItem {
-                kind: 3,
-                first: (100, Some(120)),
-                second: None,
-            },
-            PipelineItem {
-                kind: 0,
-                first: (50, Some(90)),
-                second: None,
-            },
+            item(5, (100, Some(150)), None),
+            item(3, (100, Some(120)), None),
+            item(0, (50, Some(90)), None),
         ];
         let rows = pipeline_rows(&items, 0);
         assert_eq!(
-            rows,
-            vec![vec![0, 50, 40], vec![3, 100, 20], vec![5, 100, 50]]
+            serde_json::to_value(&rows).unwrap(),
+            json!([[0, 50, 40], [3, 100, 20], [5, 100, 50]])
+        );
+    }
+
+    #[test]
+    fn pipeline_metadata_encodes_as_a_trailing_object() {
+        // The id and the heavy side markers ride their row as one trailing object, while the
+        // metadata-free sibling stays a pure integer row.
+        let items = vec![
+            PipelineItem {
+                meta: PipelineItemMeta {
+                    id: Some(12),
+                    ..Default::default()
+                },
+                ..item(0, (100, Some(300)), None)
+            },
+            PipelineItem {
+                meta: PipelineItemMeta {
+                    id: Some(3),
+                    cpu_heavy: Some(0),
+                    gpu_heavy: Some(1),
+                },
+                ..item(1, (400, Some(600)), Some((700, Some(900))))
+            },
+            item(2, (1000, Some(1100)), None),
+        ];
+        let rows = pipeline_rows(&items, 0);
+        assert_eq!(
+            serde_json::to_value(&rows).unwrap(),
+            json!([
+                [0, 100, 200, { "id": 12 }],
+                [1, 400, 200, 700, 200, { "id": 3, "cpu_heavy": 0, "gpu_heavy": 1 }],
+                [2, 1000, 100],
+            ])
         );
     }
 

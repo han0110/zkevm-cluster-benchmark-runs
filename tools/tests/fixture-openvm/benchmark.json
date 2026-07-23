@@ -1,0 +1,4 @@
+{
+  "name": "fixture-openvm",
+  "description": "Committed three-proof openvm fixture run for the parser integration tests."
+}

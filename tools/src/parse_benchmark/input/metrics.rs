@@ -79,6 +79,7 @@ struct RawMetric {
 #[derive(serde::Deserialize)]
 struct RawMetadata {
     block_used_gas: Option<u64>,
+    original_test_name: Option<String>,
 }
 
 /// The proving result, exactly one of success or crashed in a well-formed file.
@@ -123,13 +124,19 @@ fn blamed_nodes(reason: &str) -> Vec<String> {
     out
 }
 
-/// Parses one metric JSON document, falling back to the file stem for the proof name.
+/// Parses one metric JSON document. The block id prefers the metadata's original test name, falls
+/// back to the file's name field, and finally to the file stem.
 pub fn parse_metric_json(
     file_stem: &str,
     text: &str,
 ) -> crate::parse_benchmark::Result<MetricBlock> {
     let raw: RawMetric = serde_json::from_str(text).map_err(json_at(PathBuf::from(file_stem)))?;
-    let name = raw.name.unwrap_or_else(|| file_stem.to_string());
+    let metadata = raw.metadata;
+    let name = metadata
+        .as_ref()
+        .and_then(|m| m.original_test_name.clone())
+        .or(raw.name)
+        .unwrap_or_else(|| file_stem.to_string());
     let timestamp_completed = match raw.timestamp_completed {
         Some(s) => Some(Ts::parse(&s)?),
         None => None,
@@ -162,7 +169,7 @@ pub fn parse_metric_json(
     Ok(MetricBlock {
         name,
         status,
-        block_used_gas: raw.metadata.and_then(|m| m.block_used_gas),
+        block_used_gas: metadata.and_then(|m| m.block_used_gas),
         proving_time_ms,
         proof_size,
         verification_time_ms,
@@ -204,16 +211,33 @@ impl MetricsMeta {
 }
 
 /// Splits a name-vX.Y.Z token into its name and version parts at the last "-v" immediately followed
-/// by a digit. A token without such a suffix yields the whole token as the name and no version.
+/// by a digit. Absent such a suffix, it falls back to a trailing "-<short sha>", a hyphen followed by
+/// seven or more lowercase hex characters running to the token end, so a git-sha-suffixed token like
+/// reth-c5dff62 yields name reth and version c5dff62. A token matching neither rule yields the whole
+/// token as the name and no version.
 fn split_name_version(token: &str) -> (String, Option<String>) {
-    match token
+    let at = token
         .match_indices("-v")
         .filter(|(at, _)| token[at + 2..].starts_with(|c: char| c.is_ascii_digit()))
         .last()
-    {
-        Some((at, _)) => (token[..at].to_string(), Some(token[at + 1..].to_string())),
+        .map(|(at, _)| at)
+        .or_else(|| short_sha_split(token));
+    match at {
+        Some(at) => (token[..at].to_string(), Some(token[at + 1..].to_string())),
         None => (token.to_string(), None),
     }
+}
+
+/// The byte index of the hyphen before a trailing short git sha, a suffix of seven or more lowercase
+/// hex characters running to the token end. None when the last segment is not such a sha.
+fn short_sha_split(token: &str) -> Option<usize> {
+    let at = token.rfind('-')?;
+    let suffix = &token[at + 1..];
+    (suffix.len() >= 7
+        && suffix
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(at)
 }
 
 /// Loads every metric block under a metrics directory plus the guest and version metadata.
@@ -375,6 +399,29 @@ mod tests {
     }
 
     #[test]
+    fn splits_name_from_trailing_short_sha_when_no_version() {
+        assert_eq!(
+            split_name_version("reth-c5dff62"),
+            ("reth".to_string(), Some("c5dff62".to_string()))
+        );
+        assert_eq!(
+            split_name_version("ethrex-e8860d2"),
+            ("ethrex".to_string(), Some("e8860d2".to_string()))
+        );
+        assert_eq!(
+            split_name_version("openvm-8f86342"),
+            ("openvm".to_string(), Some("8f86342".to_string()))
+        );
+        // A token with neither a version nor a short-sha suffix keeps the whole token.
+        assert_eq!(split_name_version("fixture"), ("fixture".to_string(), None));
+        // A trailing segment shorter than seven hex characters is not a short sha, so no split.
+        assert_eq!(
+            split_name_version("reth-abc"),
+            ("reth-abc".to_string(), None)
+        );
+    }
+
+    #[test]
     fn meta_from_dirs_splits_guest_and_version() {
         let meta = MetricsMeta::from_dirs(
             Some("zisk-eth-client-reth-v0.9.0".to_string()),
@@ -409,6 +456,21 @@ mod tests {
         assert!(m.timestamp_completed.is_some());
         assert!(m.crashed_nodes.is_empty());
         assert_eq!(m.crashed_job, None);
+    }
+
+    #[test]
+    fn prefers_the_original_test_name_from_metadata() {
+        // The metadata's original test name is the block id when present, so the verbose archive
+        // name field is overridden.
+        let text = r#"{
+          "name": "eest__mainnet_25580396__block0",
+          "timestamp_completed": "2026-07-22T09:24:05.022795163Z",
+          "metadata": { "block_used_gas": 12345, "original_test_name": "mainnet_25580396" },
+          "proving": { "success": { "proof_size": 268071, "proving_time_ms": 903, "verification_time_ms": 13 } }
+        }"#;
+        let m = parse_metric_json("eest__mainnet_25580396__block0", text).unwrap();
+        assert_eq!(m.name, "mainnet_25580396");
+        assert_eq!(m.block_used_gas, Some(12345));
     }
 
     #[test]

@@ -1,8 +1,9 @@
-//! Integration tests over the committed fixture run under tests/fixture.
+//! Integration tests over the committed fixture runs under tests/fixture and tests/fixture-openvm.
 //!
-//! The fixture is a self-contained ten-proof zisk run (logs/ plus zkevm-metrics/) checked into the
-//! repository, so these tests exercise the whole pipeline on a fresh checkout with no external
-//! data.
+//! Each fixture is a self-contained run (logs/ plus zkevm-metrics/) checked into the repository,
+//! so these tests exercise the whole pipeline on a fresh checkout with no external data. The zisk
+//! fixture holds ten proofs, and the openvm fixture holds two fully logged proofs plus one block
+//! whose proof the lossy coordinator capture dropped entirely.
 
 use std::{
     io::Read,
@@ -16,7 +17,7 @@ use tools::parse_benchmark::{
         Sources,
         log::{
             LogStatus,
-            zkvm::{detect_backend, zisk::coordinator},
+            zkvm::{detect_backend, openvm, zisk::coordinator},
         },
     },
     parse_to_benchmark,
@@ -27,6 +28,25 @@ fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fixture")
+}
+
+/// The committed openvm fixture run directory.
+fn fixture_openvm_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixture-openvm")
+}
+
+/// The numeric cells of a wire pipeline row, its optional trailing metadata object dropped.
+fn row_cells(row: &[serde_json::Value]) -> Vec<i64> {
+    row.iter().filter_map(serde_json::Value::as_i64).collect()
+}
+
+/// The id of a wire pipeline row's trailing metadata object, or None on a row without one.
+fn row_id(row: &[serde_json::Value]) -> Option<i64> {
+    row.last()
+        .and_then(|v| v.get("id"))
+        .and_then(serde_json::Value::as_i64)
 }
 
 /// A fresh scratch directory under the system temp root, for a test that writes a benchmark.json.
@@ -302,7 +322,8 @@ fn blocks_carry_pipeline_items() {
                 node.pipeline.len()
             );
             let aggregator = node.phases[4].is_some();
-            for row in &node.pipeline {
+            let rows: Vec<Vec<i64>> = node.pipeline.iter().map(|r| row_cells(r)).collect();
+            for row in &rows {
                 assert!(
                     (0..kind_count).contains(&row[0]),
                     "kind {} out of template range",
@@ -332,8 +353,7 @@ fn blocks_carry_pipeline_items() {
                 }
             }
             assert!(
-                node.pipeline
-                    .windows(2)
+                rows.windows(2)
                     .all(|w| (w[0][1], w[0][0]) <= (w[1][1], w[1][0])),
                 "pipeline rows out of (start, kind) order in block {}",
                 block.name
@@ -511,6 +531,301 @@ fn patch_appends_a_second_run_and_dedupes_the_id() {
     assert_eq!(doc.runs[1].id, "fixture-patch-1");
     // Both runs carry the fixture's ten blocks, since each is a full parse of the same directory.
     assert_eq!(doc.runs[1].blocks.len(), EXPECTED_PROOFS);
+}
+
+/// The openvm fixture holds two fully logged proofs, blocks 25580000 and 25580001, plus block
+/// 25580606 whose proof the lossy coordinator capture dropped entirely.
+const EXPECTED_OPENVM_LOGGED: usize = 2;
+
+#[test]
+fn openvm_coordinator_log_parses_without_error() {
+    let dir = fixture_openvm_dir();
+    let coord = std::fs::read_to_string(dir.join("logs/coordinator.log")).unwrap();
+    let logs = openvm::coordinator::parse(&coord).unwrap();
+    let success = logs
+        .iter()
+        .filter(|l| l.status == LogStatus::Success)
+        .count();
+    assert_eq!(success, EXPECTED_OPENVM_LOGGED, "coordinator success logs");
+}
+
+#[test]
+fn openvm_backend_parses_cluster_logs() {
+    let logs_dir = fixture_openvm_dir().join("logs");
+    let backend = detect_backend(&logs_dir).expect("openvm backend detected");
+    let parsed = backend.parse(&logs_dir).unwrap();
+
+    assert_eq!(parsed.name, "openvm");
+    assert_eq!(parsed.phases.len(), 5, "phase preset");
+    // Metered execution, segment, and recursion are the overlap phases, since the executor meters
+    // segments while they prove and recursion consumes segments as they complete.
+    let preset: Vec<(&str, bool)> = parsed
+        .phases
+        .iter()
+        .map(|p| (p.name.as_str(), p.overlap))
+        .collect();
+    assert_eq!(
+        preset,
+        vec![
+            ("input", false),
+            ("metered_execution", true),
+            ("segment", true),
+            ("recursion", true),
+            ("wrap", false),
+        ]
+    );
+    // No openvm kind is paired, the work items each logging one self-contained completion span
+    // and metered execution deriving one span per sent segment.
+    assert_eq!(parsed.pipeline.len(), 5, "kind template");
+    assert!(parsed.pipeline.iter().all(|k| !k.paired));
+    let success = parsed
+        .logs
+        .iter()
+        .filter(|l| l.status == LogStatus::Success)
+        .count();
+    assert_eq!(success, EXPECTED_OPENVM_LOGGED, "success logs");
+    // Every successful log carries exactly one aggregator node, whose final phase window is set.
+    assert!(
+        parsed
+            .logs
+            .iter()
+            .filter(|l| l.status == LogStatus::Success)
+            .all(|l| l
+                .nodes
+                .iter()
+                .filter(|n| n.phases.last().is_some_and(Option::is_some))
+                .count()
+                == 1)
+    );
+}
+
+#[test]
+fn openvm_assembles_document_with_an_unlogged_block() {
+    let dir = fixture_openvm_dir();
+    let b = parse_to_benchmark(&dir).unwrap();
+
+    assert_eq!(b.software.zkvm.name, "openvm");
+    assert_eq!(b.software.zkvm.version, "8f86342");
+    assert_eq!(b.software.guest.name, "reth");
+    assert_eq!(b.software.guest.version, "c5dff62");
+    assert_eq!(b.software.zkvm.phases[1].name, "metered_execution");
+    assert_eq!(b.software.zkvm.phases[1].label, "Metered Execution");
+    assert_eq!(b.software.zkvm.phases[4].label, "Wrap");
+    // The pipeline kinds keep their wire indices and labels while their phase ownership follows
+    // the preset.
+    let owners: Vec<(&str, &str)> = b
+        .software
+        .zkvm
+        .pipeline
+        .iter()
+        .map(|k| (k.name.as_str(), k.phase.as_str()))
+        .collect();
+    assert_eq!(
+        owners,
+        vec![
+            ("metered_execution", "metered_execution"),
+            ("app_segment", "segment"),
+            ("leaf", "recursion"),
+            ("internal", "recursion"),
+            ("wrap", "wrap"),
+        ]
+    );
+    assert_eq!(b.hardware.nodes.len(), 4);
+
+    let run = &b.runs[0];
+    // The metric archive is the source of truth for which blocks exist, so the coordinator-dropped
+    // block is still a block, and every metric reports success.
+    assert_eq!(run.block_count, 3);
+    assert_eq!(run.success_count, 3);
+    // The block id comes from the metric metadata's original test name, not the verbose archive
+    // name field.
+    let names: Vec<&str> = run.blocks.iter().map(|bl| bl.name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["mainnet_25580000", "mainnet_25580001", "mainnet_25580606"]
+    );
+
+    let first = &run.blocks[0];
+    assert_eq!(first.proving_ms, Some(4883));
+    assert_eq!(first.gas_used, Some(26211834));
+    assert_eq!(
+        first.meta.get("segments").and_then(|v| v.as_u64()),
+        Some(52)
+    );
+    assert_eq!(
+        first.meta.get("input_size").and_then(|v| v.as_u64()),
+        Some(6711680)
+    );
+    assert!(first.nodes.iter().all(|n| n.phases.len() == 5));
+    // Every participating node carries an input transfer window ending at its last
+    // input-file-written time, at or before its metered execution starts, the small honest gap
+    // between the input write and the worker taking up the proof.
+    assert!(first.nodes.iter().all(|n| n.phases[0].is_some()));
+    assert!(
+        first
+            .nodes
+            .iter()
+            .all(|n| match (&n.phases[0], &n.phases[1]) {
+                (Some(input), Some(metered)) => input.start_ms + input.dur_ms <= metered.start_ms,
+                _ => false,
+            })
+    );
+    // Every participating node of a logged block carries a metered execution window that overlaps
+    // its segment envelope, starting at or before the envelope and ending after it begins.
+    assert!(first.nodes.iter().all(|n| n.phases[1].is_some()));
+    assert!(
+        first
+            .nodes
+            .iter()
+            .all(|n| match (&n.phases[1], &n.phases[2]) {
+                (Some(metered), Some(segment)) =>
+                    metered.start_ms <= segment.start_ms
+                        && segment.start_ms < metered.start_ms + metered.dur_ms,
+                _ => false,
+            })
+    );
+    // Exactly one node carries the wrap window, the one whose worker wrapped the root proof.
+    assert_eq!(
+        first.nodes.iter().filter(|n| n.phases[4].is_some()).count(),
+        1
+    );
+
+    // The dropped block binds no log, so it renders from its metric alone, every phase null and no
+    // pipeline, with participation defaulting to the full cluster.
+    let dropped = &run.blocks[2];
+    assert_eq!(dropped.proving_ms, Some(4851));
+    assert!(dropped.meta.is_empty());
+    assert!(
+        dropped
+            .nodes
+            .iter()
+            .all(|n| n.phases.iter().all(Option::is_none) && n.pipeline.is_empty())
+    );
+    assert!(dropped.nodes.iter().all(|n| n.participated));
+}
+
+#[test]
+fn openvm_blocks_carry_pipeline_items() {
+    let dir = fixture_openvm_dir();
+    let b = parse_to_benchmark(&dir).unwrap();
+    let kind_count = b.software.zkvm.pipeline.len() as i64;
+    // Kind indices of the openvm template, in wire order.
+    let (metered_execution, app_segment, leaf, wrap) = (0, 1, 2, 4);
+
+    for (block, segments) in b.runs[0].blocks.iter().take(2).zip([52i64, 62]) {
+        let rows: Vec<&Vec<serde_json::Value>> =
+            block.nodes.iter().flat_map(|n| &n.pipeline).collect();
+        let cells: Vec<Vec<i64>> = rows.iter().map(|r| row_cells(r)).collect();
+        assert!(
+            cells.iter().all(|r| (0..kind_count).contains(&r[0])),
+            "kind out of template range in {}",
+            block.name
+        );
+        // Completion-line records leave nothing dangling and no openvm kind is paired, so every
+        // row is one complete span.
+        assert!(cells.iter().all(|r| r.len() == 3));
+        // One app row per segment, their ids exactly the segment indices the workers named.
+        let ids_of = |kind: i64| -> Vec<i64> {
+            let mut ids: Vec<i64> = rows
+                .iter()
+                .zip(&cells)
+                .filter(|(_, c)| c[0] == kind)
+                .map(|(r, _)| row_id(r).expect("row without an id"))
+                .collect();
+            ids.sort_unstable();
+            ids
+        };
+        assert_eq!(
+            ids_of(app_segment),
+            (0..segments).collect::<Vec<i64>>(),
+            "app segment ids in {}",
+            block.name
+        );
+        // Every leaf row carries its leaf index, distinct and within the arity-4 leaf count.
+        let leaf_ids = ids_of(leaf);
+        assert!(!leaf_ids.is_empty(), "no leaf rows in {}", block.name);
+        assert!(
+            leaf_ids.windows(2).all(|w| w[0] < w[1]),
+            "duplicate leaf ids in {}",
+            block.name
+        );
+        assert!(
+            leaf_ids
+                .iter()
+                .all(|id| (0..(segments + 3) / 4).contains(id)),
+            "leaf id out of range in {}",
+            block.name
+        );
+        // One derived metered-execution row per sent segment, their ids exactly the segment
+        // indices, one metered row for every app segment across the block.
+        assert_eq!(
+            ids_of(metered_execution),
+            (0..segments).collect::<Vec<i64>>(),
+            "metered execution ids in {}",
+            block.name
+        );
+        for node in &block.nodes {
+            let node_cells: Vec<Vec<i64>> = node.pipeline.iter().map(|r| row_cells(r)).collect();
+            // Each metered-execution row shares its id with an app segment proved on the same node,
+            // the worker having both metered and proved that segment.
+            let app_ids: std::collections::BTreeSet<i64> = node
+                .pipeline
+                .iter()
+                .filter(|r| row_cells(r)[0] == app_segment)
+                .map(|r| row_id(r).expect("app segment row without an id"))
+                .collect();
+            assert!(
+                node.pipeline
+                    .iter()
+                    .filter(|r| row_cells(r)[0] == metered_execution)
+                    .all(|r| app_ids.contains(&row_id(r).expect("metered row without an id"))),
+                "a metered execution row's id is not an app segment on the same node in {}",
+                block.name
+            );
+            // The final wrap runs only on the node that carries the wrap window.
+            let wraps = node_cells.iter().filter(|r| r[0] == wrap).count();
+            assert_eq!(wraps, usize::from(node.phases[4].is_some()));
+            assert!(
+                node_cells
+                    .windows(2)
+                    .all(|w| (w[0][1], w[0][0]) <= (w[1][1], w[1][0])),
+                "pipeline rows out of (start, kind) order in {}",
+                block.name
+            );
+        }
+    }
+}
+
+#[test]
+fn openvm_sidecars_skip_the_unlogged_block() {
+    let dir = tempdir();
+    let out = dir.join("benchmark.json");
+    parse_benchmark::run(&[fixture_openvm_dir()], &out, false, false).expect("write succeeds");
+
+    let log_dir = dir
+        .join("log")
+        .join("fixture-openvm")
+        .join("fixture-openvm");
+    assert!(log_dir.join("mainnet_25580000.tar.json").is_file());
+    assert!(log_dir.join("mainnet_25580001.tar.json").is_file());
+    // A block with no captured log lines writes no archive, which the frontend reports as absent.
+    assert!(!log_dir.join("mainnet_25580606.tar.json").exists());
+}
+
+/// Asserts the openvm fixture serializes byte-for-byte to the committed golden document.
+/// Regenerate the golden with `cargo run -- parse-benchmark --input tests/fixture-openvm --output
+/// tests/fixture-openvm/output.json --force` only when a change to the document is intended.
+#[test]
+fn openvm_fixture_serializes_byte_for_byte_to_the_golden_document() {
+    let generated = tools::parse_benchmark::output::to_json(
+        &parse_to_benchmark(&fixture_openvm_dir()).unwrap(),
+    )
+    .unwrap();
+    let expected = std::fs::read_to_string(fixture_openvm_dir().join("output.json")).unwrap();
+    assert_eq!(
+        generated, expected,
+        "serialized benchmark.json drifted from tests/fixture-openvm/output.json"
+    );
 }
 
 /// A patch is refused when the run's benchmark name differs from the existing document, so a run is

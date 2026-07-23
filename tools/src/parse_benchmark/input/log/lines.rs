@@ -44,7 +44,8 @@ const ALL_LEVELS: [&str; 5] = ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"];
 
 /// Reads every coordinator and worker log line into role-tagged records, sorted by timestamp so
 /// lines from different roles interleave on the one shared clock. The coordinator reads as role
-/// "coordinator" and worker-N.log as role "workerN".
+/// "coordinator", worker-N.log as role "workerN", and the per-GPU worker-N-gpuG.log as role
+/// "workerN-gpuG".
 pub fn load_raw_lines(logs_dir: &Path) -> crate::parse_benchmark::Result<Vec<RawLine>> {
     let mut lines: Vec<RawLine> = Vec::new();
 
@@ -56,11 +57,24 @@ pub fn load_raw_lines(logs_dir: &Path) -> crate::parse_benchmark::Result<Vec<Raw
 
     for (digit, path) in worker_files_sorted(logs_dir, &WORKER_LOG_RE)? {
         let text = crate::parse_benchmark::read_to_string_at(&path)?;
-        parse_file(&strip_ansi(&text), &format!("worker{digit}"), &mut lines)?;
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        parse_file(&strip_ansi(&text), &worker_role(name, digit), &mut lines)?;
     }
 
     lines.sort_by_key(|l| l.ts.epoch_us());
     Ok(lines)
+}
+
+/// The role string for a worker log file, "workerN" for worker-N.log and "workerN-gpuG" for the
+/// per-GPU worker-N-gpuG.log, so lines from each GPU worker stay distinguishable on the shared clock.
+fn worker_role(name: &str, digit: u32) -> String {
+    match WORKER_LOG_RE.captures(name).and_then(|c| c.get(2)) {
+        Some(gpu) => format!("worker{digit}-gpu{}", gpu.as_str()),
+        None => format!("worker{digit}"),
+    }
 }
 
 /// Parses one role's log text, appending one record per line. A line whose first token is not a
@@ -101,18 +115,22 @@ fn parse_file(
 }
 
 /// Splits the post-timestamp remainder into the lowercase level and the message. The level is the
-/// earliest recognized level token (a level keyword immediately before a colon), so the worker's
-/// module path that precedes it is dropped and a level word inside the message is not mistaken for
-/// it. An unrecognized level defaults to debug and the whole remainder is the message, so the level
-/// is always one of trace, debug, info, warn, or error.
+/// earliest recognized level token in either of its two wire forms, a level keyword immediately
+/// before a colon as zisk prints it, or a bare level keyword before a space as the tracing fmt
+/// subscriber prints it, so the module path that precedes a zisk level is dropped while the span
+/// and target context after a tracing level is kept. A level word inside the message is not
+/// mistaken for the level because the earliest token wins. An unrecognized level defaults to debug
+/// and the whole remainder is the message, so the level is always one of trace, debug, info, warn,
+/// or error.
 fn split_level(rest: &str) -> (String, String) {
     let mut best: Option<(usize, &'static str, usize)> = None;
     for level in ALL_LEVELS {
-        let needle = format!("{level}:");
-        if let Some(pos) = find_token(rest, &needle)
-            && best.is_none_or(|(b, _, _)| pos < b)
-        {
-            best = Some((pos, level, needle.len()));
+        for needle in [format!("{level}:"), format!("{level} ")] {
+            if let Some(pos) = find_token(rest, &needle)
+                && best.is_none_or(|(b, _, _)| pos < b)
+            {
+                best = Some((pos, level, needle.len()));
+            }
         }
     }
     match best {
@@ -140,7 +158,30 @@ fn find_token(haystack: &str, needle: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_benchmark::input::log::lines::{RawLine, parse_file, scrub, split_level};
+    use crate::parse_benchmark::input::{
+        WORKER_LOG_RE,
+        log::lines::{RawLine, parse_file, scrub, split_level, worker_role},
+    };
+
+    #[test]
+    fn worker_log_name_maps_to_node_digit_and_role() {
+        // A per-GPU worker log carries both the node digit and the GPU index in its role.
+        let caps = WORKER_LOG_RE
+            .captures("worker-2-gpu3.log")
+            .expect("per-GPU worker log matches");
+        let digit: u32 = caps.get(1).unwrap().as_str().parse().unwrap();
+        assert_eq!(digit, 2);
+        assert_eq!(worker_role("worker-2-gpu3.log", digit), "worker2-gpu3");
+        // A plain worker log keeps its historical workerN role unchanged.
+        let caps = WORKER_LOG_RE
+            .captures("worker-2.log")
+            .expect("plain worker log matches");
+        let digit: u32 = caps.get(1).unwrap().as_str().parse().unwrap();
+        assert_eq!(digit, 2);
+        assert_eq!(worker_role("worker-2.log", digit), "worker2");
+        // The telemetry log is left to the dmon reader, so it is not a worker log.
+        assert!(WORKER_LOG_RE.captures("worker-2-dmon.log").is_none());
+    }
 
     #[test]
     fn every_level_is_kept_with_the_namespace_dropped() {
@@ -155,6 +196,23 @@ mod tests {
         // The module path before the level is dropped, so the message carries no namespace.
         assert_eq!(out[0].msg, "received");
         assert_eq!(out[1].msg, "Starting Contribution");
+    }
+
+    #[test]
+    fn a_tracing_fmt_line_keeps_its_span_and_target_context() {
+        // The tracing fmt subscriber prints the level before the span and target with no colon, so
+        // the level is read from the bare keyword and everything after it stays in the message.
+        let text = "2026-07-21T13:56:22.806865Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Coordinator-consumer: proved segment 0: queue_wait=0ms, fastfwd=0ms, stark=384ms, prove=384ms";
+        let mut out: Vec<RawLine> = Vec::new();
+        parse_file(text, "worker1-gpu0", &mut out).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].level, "info");
+        assert!(
+            out[0]
+                .msg
+                .starts_with("coordinate_parallel_prove{proof_id=ere-6f8d"),
+            "the span context survives in the message"
+        );
     }
 
     #[test]

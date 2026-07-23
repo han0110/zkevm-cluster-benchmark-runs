@@ -29,6 +29,7 @@ pub fn zisk_phases() -> Vec<PhaseDef> {
     .map(|(name, label)| PhaseDef {
         name: name.to_string(),
         label: label.to_string(),
+        overlap: false,
     })
     .collect()
 }

@@ -1,0 +1,583 @@
+2026-07-21T13:54:44.352931Z  INFO edge_manager::otel_metrics: metrics.endpoint not set, metrics export disabled
+2026-07-21T13:54:44.352947Z  INFO edge_manager: Starting Edge Manager on 0.0.0.0:3000
+2026-07-21T13:54:44.352958Z  INFO edge_manager::server: Manager loadout: 0 seeded program(s) — 
+2026-07-21T13:54:44.391919Z  INFO edge_manager::server: Edge Manager listening on 0.0.0.0:3000
+2026-07-21T13:55:05.923645Z  INFO edge_manager::handlers: Registering ere-d11a3ab751015b5e@v2290884206 with 16 worker(s) (3592648 ELF bytes)
+2026-07-21T13:55:07.562820Z  INFO edge_manager::handlers: Staged input for proof ere-6f8d9d31213b4238b586606bc0e6bb19 (main=true, deferral_states=0, deferral_inputs=0)
+2026-07-21T13:55:07.563047Z  INFO edge_manager::handlers: Starting Edge proof: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, program=ere-d11a3ab751015b5e@v2290884206
+2026-07-21T13:55:07.563073Z  INFO edge_manager::worker_registry: ready_workers: returning 16 workers sorted by ID: [(0, "http://10.128.2.92:8001"), (1, "http://10.128.2.92:8002"), (2, "http://10.128.2.92:8003"), (3, "http://10.128.2.92:8004"), (4, "http://10.128.2.90:8001"), (5, "http://10.128.2.90:8002"), (6, "http://10.128.2.90:8003"), (7, "http://10.128.2.90:8004"), (8, "http://10.128.2.89:8001"), (9, "http://10.128.2.89:8002"), (10, "http://10.128.2.89:8003"), (11, "http://10.128.2.89:8004"), (12, "http://10.128.2.91:8001"), (13, "http://10.128.2.91:8002"), (14, "http://10.128.2.91:8003"), (15, "http://10.128.2.91:8004")]
+2026-07-21T13:55:07.563655Z  INFO edge_manager::handlers: Waiting for worker 0 to be ready (provers initializing)...
+2026-07-21T13:56:17.612675Z  INFO edge_manager::handlers: Waiting for worker 1 to be ready (provers initializing)...
+2026-07-21T13:56:19.614757Z  INFO edge_manager::handlers: Waiting for worker 2 to be ready (provers initializing)...
+2026-07-21T13:56:21.631436Z  INFO edge_manager::scheduler: init_proof ere-6f8d9d31213b4238b586606bc0e6bb19: 16 workers registered (16 app-eligible / normal-set)
+2026-07-21T13:56:21.675074Z  INFO edge_manager::handlers: Successfully uploaded input to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.679240Z  INFO edge_manager::handlers: Successfully uploaded input to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.680944Z  INFO edge_manager::handlers: Successfully uploaded input to worker 2 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.681057Z  INFO edge_manager::handlers: Successfully uploaded input to worker 3 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.681185Z  INFO edge_manager::handlers: Successfully uploaded input to worker 4 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.684558Z  INFO edge_manager::handlers: Successfully uploaded input to worker 5 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.685067Z  INFO edge_manager::handlers: Successfully uploaded input to worker 8 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.686174Z  INFO edge_manager::handlers: Successfully uploaded input to worker 6 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.687424Z  INFO edge_manager::handlers: Successfully uploaded input to worker 7 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.691104Z  INFO edge_manager::handlers: Successfully uploaded input to worker 9 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.693156Z  INFO edge_manager::handlers: Successfully uploaded input to worker 10 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.694028Z  INFO edge_manager::handlers: Successfully uploaded input to worker 11 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.700918Z  INFO edge_manager::handlers: Successfully uploaded input to worker 13 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.704516Z  INFO edge_manager::handlers: Successfully uploaded input to worker 14 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.704883Z  INFO edge_manager::handlers: Successfully uploaded input to worker 15 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.705729Z  INFO edge_manager::handlers: Successfully uploaded input to worker 12 for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:21.705734Z  INFO edge_manager::handlers: Input fan-out complete for proof ere-6f8d9d31213b4238b586606bc0e6bb19: workers=16, bytes=6711680, elapsed=73ms
+2026-07-21T13:56:21.706057Z  INFO edge_manager::handlers: Work sent to worker 12 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=12, num_provers=16
+2026-07-21T13:56:21.706065Z  INFO edge_manager::handlers: Work sent to worker 2 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=2, num_provers=16
+2026-07-21T13:56:21.706077Z  INFO edge_manager::handlers: Work sent to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=0, num_provers=16
+2026-07-21T13:56:21.706081Z  INFO edge_manager::handlers: Work sent to worker 7 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=7, num_provers=16
+2026-07-21T13:56:21.706084Z  INFO edge_manager::handlers: Work sent to worker 15 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=15, num_provers=16
+2026-07-21T13:56:21.706101Z  INFO edge_manager::handlers: Work sent to worker 13 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=13, num_provers=16
+2026-07-21T13:56:21.706089Z  INFO edge_manager::handlers: Work sent to worker 11 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=11, num_provers=16
+2026-07-21T13:56:21.706114Z  INFO edge_manager::handlers: Work sent to worker 9 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=9, num_provers=16
+2026-07-21T13:56:21.706118Z  INFO edge_manager::handlers: Work sent to worker 3 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=3, num_provers=16
+2026-07-21T13:56:21.706110Z  INFO edge_manager::handlers: Work sent to worker 14 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=14, num_provers=16
+2026-07-21T13:56:21.706118Z  INFO edge_manager::handlers: Work sent to worker 8 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=8, num_provers=16
+2026-07-21T13:56:21.706125Z  INFO edge_manager::handlers: Work sent to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=1, num_provers=16
+2026-07-21T13:56:21.706132Z  INFO edge_manager::handlers: Work sent to worker 4 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=4, num_provers=16
+2026-07-21T13:56:21.706131Z  INFO edge_manager::handlers: Work sent to worker 6 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=6, num_provers=16
+2026-07-21T13:56:21.706132Z  INFO edge_manager::handlers: Work sent to worker 10 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=10, num_provers=16
+2026-07-21T13:56:21.706146Z  INFO edge_manager::handlers: Work sent to worker 5 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: prover_id=5, num_provers=16
+2026-07-21T13:56:22.809826Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] not yet complete, missing segment 1
+2026-07-21T13:56:22.809842Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:22.909818Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] not yet complete, missing segment 2
+2026-07-21T13:56:22.909837Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:23.107831Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] not yet complete, missing segment 5
+2026-07-21T13:56:23.107851Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:23.270130Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] not yet complete, missing segment 2
+2026-07-21T13:56:23.270147Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:23.272492Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:23.272499Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:23.676185Z  INFO edge_manager::proof_state::result_handler: Execute e2 done, cost: 0
+2026-07-21T13:56:23.676207Z  INFO edge_manager::proof_state::result_handler: trigger_tail_proofs for proof ere-6f8d9d31213b4238b586606bc0e6bb19: num_segments=52, leaf_arity=4, internal_arity=3, num_leaf_proofs=13, num_internal_layers=3, effective_final_layer=2
+2026-07-21T13:56:23.676214Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=execute_e2
+2026-07-21T13:56:23.676218Z  INFO edge_manager::scheduler: set_num_segments for ere-6f8d9d31213b4238b586606bc0e6bb19: num_segments=52, num_workers=16
+2026-07-21T13:56:23.962298Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] not yet complete, missing segment 13
+2026-07-21T13:56:23.962316Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:23.963584Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] not yet complete, missing segment 21
+2026-07-21T13:56:23.963590Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.072149Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] not yet complete, missing segment 13
+2026-07-21T13:56:24.072168Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.129699Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] not yet complete, missing segment 6
+2026-07-21T13:56:24.129717Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.130926Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] not yet complete, missing segment 7
+2026-07-21T13:56:24.130934Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.153574Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.153579Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.203811Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] not yet complete, missing segment 8
+2026-07-21T13:56:24.203828Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.205402Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] not yet complete, missing segment 13
+2026-07-21T13:56:24.205412Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.347052Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.347067Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.359089Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] not yet complete, missing segment 8
+2026-07-21T13:56:24.359095Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.363709Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] not yet complete, missing segment 21
+2026-07-21T13:56:24.363726Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.364718Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] not yet complete, missing segment 16
+2026-07-21T13:56:24.364727Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.368731Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] not yet complete, missing segment 21
+2026-07-21T13:56:24.368739Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.387640Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.387652Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.448765Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] not yet complete, missing segment 16
+2026-07-21T13:56:24.448774Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.481044Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] not yet complete, missing segment 18
+2026-07-21T13:56:24.481062Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.491860Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] not yet complete, missing segment 44
+2026-07-21T13:56:24.491866Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.525396Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.525401Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.602900Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] not yet complete, missing segment 24
+2026-07-21T13:56:24.602916Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.623404Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] not yet complete, missing segment 28
+2026-07-21T13:56:24.623421Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.623427Z  INFO edge_manager::scheduler: Worker 14 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:24.623429Z  INFO edge_manager::scheduler: Worker 14 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.625894Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 14 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[0, 3], children=4, queue_wait=1353ms
+2026-07-21T13:56:24.635964Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] not yet complete, missing segment 44
+2026-07-21T13:56:24.635969Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.727483Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] not yet complete, missing segment 37
+2026-07-21T13:56:24.727486Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.727488Z  INFO edge_manager::scheduler: Worker 4 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:24.727490Z  INFO edge_manager::scheduler: Worker 4 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.729176Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] not yet complete, missing segment 33
+2026-07-21T13:56:24.729181Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.729547Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 4 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[4, 7], children=4, queue_wait=576ms
+2026-07-21T13:56:24.734342Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] not yet complete, missing segment 28
+2026-07-21T13:56:24.734347Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.734349Z  INFO edge_manager::scheduler: Worker 15 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:24.734350Z  INFO edge_manager::scheduler: Worker 15 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.737081Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 15 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[12, 15], children=4, queue_wait=390ms
+2026-07-21T13:56:24.753197Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] not yet complete, missing segment 24
+2026-07-21T13:56:24.753214Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.760419Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] not yet complete, missing segment 48
+2026-07-21T13:56:24.760429Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.766928Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] not yet complete, missing segment 34
+2026-07-21T13:56:24.766932Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.766935Z  INFO edge_manager::scheduler: Worker 1 completed all segments: expected=4, actual=4, total_segments=52
+2026-07-21T13:56:24.766937Z  INFO edge_manager::scheduler: Worker 1 completed all 4 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.769115Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[20, 23], children=4, queue_wait=382ms
+2026-07-21T13:56:24.796003Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] not yet complete, missing segment 35
+2026-07-21T13:56:24.796011Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.814938Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] not yet complete, missing segment 50
+2026-07-21T13:56:24.814943Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.814945Z  INFO edge_manager::scheduler: Worker 0 completed all segments: expected=4, actual=4, total_segments=52
+2026-07-21T13:56:24.814948Z  INFO edge_manager::scheduler: Worker 0 completed all 4 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.816736Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[16, 19], children=4, queue_wait=291ms
+2026-07-21T13:56:24.842292Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] not yet complete, missing segment 51
+2026-07-21T13:56:24.842309Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.842315Z  INFO edge_manager::scheduler: Worker 2 completed all segments: expected=4, actual=4, total_segments=52
+2026-07-21T13:56:24.842317Z  INFO edge_manager::scheduler: Worker 2 completed all 4 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.846963Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] not yet complete, missing segment 37
+2026-07-21T13:56:24.846970Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.846972Z  INFO edge_manager::scheduler: Worker 7 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:24.846973Z  INFO edge_manager::scheduler: Worker 7 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.853196Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [0-3]
+2026-07-21T13:56:24.853283Z  INFO edge_manager::proof_state::result_handler: Leaf group [0-2] not yet complete, missing leaf 1
+2026-07-21T13:56:24.853288Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:24.909424Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.909437Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.909453Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 2: active_count=0
+2026-07-21T13:56:24.911056Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 2 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[48, 51], children=4, queue_wait=2ms
+2026-07-21T13:56:24.941335Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] not yet complete, missing segment 37
+2026-07-21T13:56:24.941341Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.941343Z  INFO edge_manager::scheduler: Worker 6 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:24.941346Z  INFO edge_manager::scheduler: Worker 6 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.943657Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] not yet complete, missing segment 25
+2026-07-21T13:56:24.943659Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.978495Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.978502Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.978504Z  INFO edge_manager::scheduler: Worker 3 completed all segments: expected=4, actual=4, total_segments=52
+2026-07-21T13:56:24.978505Z  INFO edge_manager::scheduler: Worker 3 completed all 4 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.978516Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 3: active_count=0
+2026-07-21T13:56:24.980509Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 3 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[32, 35], children=4, queue_wait=2ms
+2026-07-21T13:56:24.983904Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:24.983913Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:24.983915Z  INFO edge_manager::scheduler: Worker 5 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:24.983917Z  INFO edge_manager::scheduler: Worker 5 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:24.983928Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 5: active_count=0
+2026-07-21T13:56:24.986500Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 5 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[36, 39], children=4, queue_wait=3ms
+2026-07-21T13:56:24.987569Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [12-15]
+2026-07-21T13:56:24.987624Z  INFO edge_manager::proof_state::result_handler: Leaf group [3-5] not yet complete, missing leaf 4
+2026-07-21T13:56:24.987628Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.021915Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [20-23]
+2026-07-21T13:56:25.021969Z  INFO edge_manager::proof_state::result_handler: Leaf group [3-5] not yet complete, missing leaf 4
+2026-07-21T13:56:25.021973Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.044695Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [4-7]
+2026-07-21T13:56:25.044813Z  INFO edge_manager::proof_state::result_handler: Leaf group [0-2] not yet complete, missing leaf 2
+2026-07-21T13:56:25.044816Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.050267Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [16-19]
+2026-07-21T13:56:25.050451Z  INFO edge_manager::proof_state::result_handler: Leaf group [3-5] complete! Creating internal proof for layer 0 with 3 child proofs, segments [12-23]
+2026-07-21T13:56:25.050456Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.051700Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=0, segments=[12, 23], children=3, is_final=false, queue_wait=1ms
+2026-07-21T13:56:25.065538Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] not yet complete, missing segment 40
+2026-07-21T13:56:25.065556Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.065561Z  INFO edge_manager::scheduler: Worker 11 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:25.065563Z  INFO edge_manager::scheduler: Worker 11 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:25.074516Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] not yet complete, missing segment 28
+2026-07-21T13:56:25.074524Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.095823Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [48-51]
+2026-07-21T13:56:25.095936Z  INFO edge_manager::proof_state::result_handler: Leaf group [12-12] complete! Creating internal proof for layer 0 with 1 child proofs, segments [48-51]
+2026-07-21T13:56:25.095943Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.096322Z  INFO edge_manager::handlers: Sending internal_prove work to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=0, segments=[48, 51], children=1, is_final=false, queue_wait=1ms
+2026-07-21T13:56:25.111922Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] not yet complete, missing segment 40
+2026-07-21T13:56:25.111929Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.111932Z  INFO edge_manager::scheduler: Worker 10 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:25.111933Z  INFO edge_manager::scheduler: Worker 10 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:25.118755Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] not yet complete, missing segment 45
+2026-07-21T13:56:25.118760Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.125896Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:25.125901Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.125902Z  INFO edge_manager::scheduler: Worker 12 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:25.125903Z  INFO edge_manager::scheduler: Worker 12 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:25.125912Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 2: active_count=0
+2026-07-21T13:56:25.127968Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 2 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[28, 31], children=4, queue_wait=2ms
+2026-07-21T13:56:25.148611Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] not yet complete, missing segment 9
+2026-07-21T13:56:25.148622Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.195387Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=48, segment_end=51
+2026-07-21T13:56:25.195421Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:25.210219Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:25.210229Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.210233Z  INFO edge_manager::scheduler: Worker 13 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:25.210235Z  INFO edge_manager::scheduler: Worker 13 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:25.210245Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 1: active_count=0
+2026-07-21T13:56:25.212687Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[44, 47], children=4, queue_wait=2ms
+2026-07-21T13:56:25.236622Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [32-35]
+2026-07-21T13:56:25.236682Z  INFO edge_manager::proof_state::result_handler: Leaf group [6-8] not yet complete, missing leaf 6
+2026-07-21T13:56:25.236688Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.238335Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=12, segment_end=23
+2026-07-21T13:56:25.238380Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:25.240774Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:25.240778Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.240789Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 0: active_count=0
+2026-07-21T13:56:25.242851Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[24, 27], children=4, queue_wait=2ms
+2026-07-21T13:56:25.245980Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [36-39]
+2026-07-21T13:56:25.246063Z  INFO edge_manager::proof_state::result_handler: Leaf group [9-11] not yet complete, missing leaf 10
+2026-07-21T13:56:25.246067Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.392878Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [28-31]
+2026-07-21T13:56:25.392928Z  INFO edge_manager::proof_state::result_handler: Leaf group [6-8] not yet complete, missing leaf 6
+2026-07-21T13:56:25.392932Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.407960Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:25.407967Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.407978Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 2: active_count=0
+2026-07-21T13:56:25.411260Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 2 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[8, 11], children=4, queue_wait=4ms
+2026-07-21T13:56:25.435241Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [44-47]
+2026-07-21T13:56:25.435331Z  INFO edge_manager::proof_state::result_handler: Leaf group [9-11] not yet complete, missing leaf 10
+2026-07-21T13:56:25.435337Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.496723Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [24-27]
+2026-07-21T13:56:25.496895Z  INFO edge_manager::proof_state::result_handler: Leaf group [6-8] complete! Creating internal proof for layer 0 with 3 child proofs, segments [24-35]
+2026-07-21T13:56:25.496900Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.498193Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=0, segments=[24, 35], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:25.649134Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] not yet complete, missing segment 41
+2026-07-21T13:56:25.649142Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.649145Z  INFO edge_manager::scheduler: Worker 8 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:25.649148Z  INFO edge_manager::scheduler: Worker 8 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:25.658986Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [8-11]
+2026-07-21T13:56:25.659102Z  INFO edge_manager::proof_state::result_handler: Leaf group [0-2] complete! Creating internal proof for layer 0 with 3 child proofs, segments [0-11]
+2026-07-21T13:56:25.659105Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:25.660327Z  INFO edge_manager::handlers: Sending internal_prove work to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=0, segments=[0, 11], children=3, is_final=false, queue_wait=1ms
+2026-07-21T13:56:25.677529Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=24, segment_end=35
+2026-07-21T13:56:25.677571Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:25.828999Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:25.829004Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=app
+2026-07-21T13:56:25.829006Z  INFO edge_manager::scheduler: Worker 9 completed all segments: expected=3, actual=3, total_segments=52
+2026-07-21T13:56:25.829007Z  INFO edge_manager::scheduler: Worker 9 completed all 3 segments for proof ere-6f8d9d31213b4238b586606bc0e6bb19
+2026-07-21T13:56:25.829016Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 0: active_count=0
+2026-07-21T13:56:25.831077Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: segments=[40, 43], children=4, queue_wait=2ms
+2026-07-21T13:56:25.842518Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=0, segment_end=11
+2026-07-21T13:56:25.842670Z  INFO edge_manager::proof_state::result_handler: Creating internal proof for layer 1 (from 3 child proofs at layer 0), segments 0-35, is_final_proof=false
+2026-07-21T13:56:25.842676Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:25.843835Z  INFO edge_manager::handlers: Sending internal_prove work to worker 1 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=1, segments=[0, 35], children=3, is_final=false, queue_wait=1ms
+2026-07-21T13:56:25.978641Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=1, segment_start=0, segment_end=35
+2026-07-21T13:56:25.978721Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:26.081880Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [40-43]
+2026-07-21T13:56:26.082034Z  INFO edge_manager::proof_state::result_handler: Leaf group [9-11] complete! Creating internal proof for layer 0 with 3 child proofs, segments [36-47]
+2026-07-21T13:56:26.082043Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=leaf
+2026-07-21T13:56:26.083282Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=0, segments=[36, 47], children=3, is_final=false, queue_wait=1ms
+2026-07-21T13:56:26.261195Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=36, segment_end=47
+2026-07-21T13:56:26.261288Z  INFO edge_manager::proof_state::result_handler: Creating internal proof for layer 1 (from 2 child proofs at layer 0), segments 36-51, is_final_proof=false
+2026-07-21T13:56:26.261296Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:26.261883Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=1, segments=[36, 51], children=2, is_final=false, queue_wait=0ms
+2026-07-21T13:56:26.353437Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=1, segment_start=36, segment_end=51
+2026-07-21T13:56:26.353503Z  INFO edge_manager::proof_state::result_handler: Creating internal proof for layer 2 (from 2 child proofs at layer 1), segments 0-51, is_final_proof=true
+2026-07-21T13:56:26.353509Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:26.354010Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-6f8d9d31213b4238b586606bc0e6bb19: layer=2, segments=[0, 51], children=2, is_final=true, queue_wait=1ms
+2026-07-21T13:56:26.514802Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=2, segment_start=0, segment_end=51
+2026-07-21T13:56:26.514833Z  INFO edge_manager::proof_state::result_handler: Proof ere-6f8d9d31213b4238b586606bc0e6bb19 is completed
+2026-07-21T13:56:26.514840Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-6f8d9d31213b4238b586606bc0e6bb19, kind=internal
+2026-07-21T13:56:26.520021Z  INFO edge_manager::handlers: Persisted final proof ere-6f8d9d31213b4238b586606bc0e6bb19 to /var/tmp/openvm-final-proofs/ere-6f8d9d31213b4238b586606bc0e6bb19.proof.bin
+2026-07-21T13:56:26.521188Z  INFO edge_manager::proof_state::metrics_report: Emitted metrics for proof ere-6f8d9d31213b4238b586606bc0e6bb19: e2e=4883ms, proving=4809ms, app=59885ms, leaf=3053ms, internal=1095ms, compress=69ms
+2026-07-21T13:56:26.521387Z  INFO edge_manager::handlers: Wrote metrics report to /data/metrics/ere-6f8d9d31213b4238b586606bc0e6bb19.md
+2026-07-21T13:56:26.521449Z  INFO edge_manager::handlers: Proof ere-6f8d9d31213b4238b586606bc0e6bb19 reached terminal state Completed, cleaning up scheduler state
+2026-07-21T13:56:26.626394Z  INFO edge_manager::handlers: Staged input for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7 (main=true, deferral_states=0, deferral_inputs=0)
+2026-07-21T13:56:26.626605Z  INFO edge_manager::handlers: Starting Edge proof: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, program=ere-d11a3ab751015b5e@v2290884206
+2026-07-21T13:56:26.626633Z  INFO edge_manager::worker_registry: ready_workers: returning 16 workers sorted by ID: [(0, "http://10.128.2.92:8001"), (1, "http://10.128.2.92:8002"), (2, "http://10.128.2.92:8003"), (3, "http://10.128.2.92:8004"), (4, "http://10.128.2.90:8001"), (5, "http://10.128.2.90:8002"), (6, "http://10.128.2.90:8003"), (7, "http://10.128.2.90:8004"), (8, "http://10.128.2.89:8001"), (9, "http://10.128.2.89:8002"), (10, "http://10.128.2.89:8003"), (11, "http://10.128.2.89:8004"), (12, "http://10.128.2.91:8001"), (13, "http://10.128.2.91:8002"), (14, "http://10.128.2.91:8003"), (15, "http://10.128.2.91:8004")]
+2026-07-21T13:56:26.631452Z  INFO edge_manager::scheduler: init_proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: 16 workers registered (16 app-eligible / normal-set)
+2026-07-21T13:56:26.680615Z  INFO edge_manager::handlers: Successfully uploaded input to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.684013Z  INFO edge_manager::handlers: Successfully uploaded input to worker 3 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.686596Z  INFO edge_manager::handlers: Successfully uploaded input to worker 2 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.690711Z  INFO edge_manager::handlers: Successfully uploaded input to worker 4 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.693384Z  INFO edge_manager::handlers: Successfully uploaded input to worker 1 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.694267Z  INFO edge_manager::handlers: Successfully uploaded input to worker 7 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.695757Z  INFO edge_manager::handlers: Successfully uploaded input to worker 5 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.696908Z  INFO edge_manager::handlers: Successfully uploaded input to worker 8 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.697023Z  INFO edge_manager::handlers: Successfully uploaded input to worker 6 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.697964Z  INFO edge_manager::handlers: Successfully uploaded input to worker 11 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.698539Z  INFO edge_manager::handlers: Successfully uploaded input to worker 9 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.699789Z  INFO edge_manager::handlers: Successfully uploaded input to worker 13 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.699805Z  INFO edge_manager::handlers: Successfully uploaded input to worker 14 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.699911Z  INFO edge_manager::handlers: Successfully uploaded input to worker 10 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.700586Z  INFO edge_manager::handlers: Successfully uploaded input to worker 15 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.703518Z  INFO edge_manager::handlers: Successfully uploaded input to worker 12 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:26.706147Z  INFO edge_manager::handlers: Input fan-out complete for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: workers=16, bytes=8122481, elapsed=74ms
+2026-07-21T13:56:26.706470Z  INFO edge_manager::handlers: Work sent to worker 1 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=1, num_provers=16
+2026-07-21T13:56:26.706512Z  INFO edge_manager::handlers: Work sent to worker 10 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=10, num_provers=16
+2026-07-21T13:56:26.706529Z  INFO edge_manager::handlers: Work sent to worker 12 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=12, num_provers=16
+2026-07-21T13:56:26.706544Z  INFO edge_manager::handlers: Work sent to worker 14 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=14, num_provers=16
+2026-07-21T13:56:26.706552Z  INFO edge_manager::handlers: Work sent to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=0, num_provers=16
+2026-07-21T13:56:26.706559Z  INFO edge_manager::handlers: Work sent to worker 5 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=5, num_provers=16
+2026-07-21T13:56:26.706567Z  INFO edge_manager::handlers: Work sent to worker 3 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=3, num_provers=16
+2026-07-21T13:56:26.706559Z  INFO edge_manager::handlers: Work sent to worker 11 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=11, num_provers=16
+2026-07-21T13:56:26.706574Z  INFO edge_manager::handlers: Work sent to worker 2 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=2, num_provers=16
+2026-07-21T13:56:26.706591Z  INFO edge_manager::handlers: Work sent to worker 8 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=8, num_provers=16
+2026-07-21T13:56:26.706602Z  INFO edge_manager::handlers: Work sent to worker 13 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=13, num_provers=16
+2026-07-21T13:56:26.706607Z  INFO edge_manager::handlers: Work sent to worker 15 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=15, num_provers=16
+2026-07-21T13:56:26.706612Z  INFO edge_manager::handlers: Work sent to worker 7 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=7, num_provers=16
+2026-07-21T13:56:26.706632Z  INFO edge_manager::handlers: Work sent to worker 4 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=4, num_provers=16
+2026-07-21T13:56:26.706644Z  INFO edge_manager::handlers: Work sent to worker 6 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=6, num_provers=16
+2026-07-21T13:56:26.706654Z  INFO edge_manager::handlers: Work sent to worker 9 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: prover_id=9, num_provers=16
+2026-07-21T13:56:27.343686Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] not yet complete, missing segment 1
+2026-07-21T13:56:27.343706Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:27.358844Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] not yet complete, missing segment 2
+2026-07-21T13:56:27.358862Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:27.445064Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] not yet complete, missing segment 3
+2026-07-21T13:56:27.445070Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:27.445832Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] not yet complete, missing segment 4
+2026-07-21T13:56:27.445840Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:27.451167Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] not yet complete, missing segment 4
+2026-07-21T13:56:27.451171Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:27.485833Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] not yet complete, missing segment 7
+2026-07-21T13:56:27.485838Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:27.515228Z  INFO edge_manager::proof_state::result_handler: Batch [0-3] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:27.515233Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.046936Z  INFO edge_manager::proof_state::result_handler: Batch [4-7] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:28.046954Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.251209Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] not yet complete, missing segment 12
+2026-07-21T13:56:28.251222Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.314804Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] not yet complete, missing segment 12
+2026-07-21T13:56:28.314817Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.320687Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] not yet complete, missing segment 12
+2026-07-21T13:56:28.320699Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.385741Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] not yet complete, missing segment 9
+2026-07-21T13:56:28.385759Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.430336Z  INFO edge_manager::proof_state::result_handler: Execute e2 done, cost: 0
+2026-07-21T13:56:28.430364Z  INFO edge_manager::proof_state::result_handler: trigger_tail_proofs for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: num_segments=62, leaf_arity=4, internal_arity=3, num_leaf_proofs=16, num_internal_layers=3, effective_final_layer=2
+2026-07-21T13:56:28.430376Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=execute_e2
+2026-07-21T13:56:28.430381Z  INFO edge_manager::scheduler: set_num_segments for ere-eb45cacd1e7f467392e9d10a8d4e33d7: num_segments=62, num_workers=16
+2026-07-21T13:56:28.478487Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] not yet complete, missing segment 21
+2026-07-21T13:56:28.478502Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.531730Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] not yet complete, missing segment 22
+2026-07-21T13:56:28.531744Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.553092Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] not yet complete, missing segment 16
+2026-07-21T13:56:28.553113Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.562432Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] not yet complete, missing segment 23
+2026-07-21T13:56:28.562453Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.596904Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] not yet complete, missing segment 16
+2026-07-21T13:56:28.596922Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.645368Z  INFO edge_manager::proof_state::result_handler: Batch [20-23] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:28.645391Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.679576Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] not yet complete, missing segment 16
+2026-07-21T13:56:28.679594Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.733386Z  INFO edge_manager::proof_state::result_handler: Batch [16-19] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:28.733406Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.759968Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] not yet complete, missing segment 25
+2026-07-21T13:56:28.759991Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.778933Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] not yet complete, missing segment 25
+2026-07-21T13:56:28.778954Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.779351Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] not yet complete, missing segment 25
+2026-07-21T13:56:28.779359Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.795387Z  INFO edge_manager::proof_state::result_handler: Batch [12-15] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:28.795411Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:28.867034Z  INFO edge_manager::proof_state::result_handler: Batch [24-27] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:28.867049Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.134055Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] not yet complete, missing segment 29
+2026-07-21T13:56:29.134068Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.159089Z  INFO edge_manager::proof_state::result_handler: Batch [52-55] not yet complete, missing segment 52
+2026-07-21T13:56:29.159095Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.197119Z  INFO edge_manager::proof_state::result_handler: Batch [56-59] not yet complete, missing segment 57
+2026-07-21T13:56:29.197122Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.199076Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] not yet complete, missing segment 10
+2026-07-21T13:56:29.199082Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.232961Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] not yet complete, missing segment 36
+2026-07-21T13:56:29.232965Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.232967Z  INFO edge_manager::scheduler: Worker 6 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.232969Z  INFO edge_manager::scheduler: Worker 6 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.235140Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 6 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[0, 3], children=4, queue_wait=1720ms
+2026-07-21T13:56:29.259425Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] not yet complete, missing segment 30
+2026-07-21T13:56:29.259431Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.279865Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] not yet complete, missing segment 44
+2026-07-21T13:56:29.279872Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.281736Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] not yet complete, missing segment 30
+2026-07-21T13:56:29.281740Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.288452Z  INFO edge_manager::proof_state::result_handler: Batch [28-31] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:29.288461Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.288463Z  INFO edge_manager::scheduler: Worker 14 completed all segments: expected=3, actual=3, total_segments=62
+2026-07-21T13:56:29.288466Z  INFO edge_manager::scheduler: Worker 14 completed all 3 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.288482Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 6: active_count=1
+2026-07-21T13:56:29.290424Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 14 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[4, 7], children=4, queue_wait=1244ms
+2026-07-21T13:56:29.292287Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 6 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[28, 31], children=4, queue_wait=4ms
+2026-07-21T13:56:29.331702Z  INFO edge_manager::proof_state::result_handler: Batch [52-55] not yet complete, missing segment 52
+2026-07-21T13:56:29.331706Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.375731Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] not yet complete, missing segment 37
+2026-07-21T13:56:29.375738Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.376858Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] not yet complete, missing segment 44
+2026-07-21T13:56:29.376864Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.376867Z  INFO edge_manager::scheduler: Worker 15 completed all segments: expected=3, actual=3, total_segments=62
+2026-07-21T13:56:29.376869Z  INFO edge_manager::scheduler: Worker 15 completed all 3 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.379519Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 15 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[20, 23], children=4, queue_wait=734ms
+2026-07-21T13:56:29.444965Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] not yet complete, missing segment 44
+2026-07-21T13:56:29.444982Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.455407Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] not yet complete, missing segment 41
+2026-07-21T13:56:29.455414Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.455417Z  INFO edge_manager::scheduler: Worker 8 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.455419Z  INFO edge_manager::scheduler: Worker 8 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.457402Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 8 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[16, 19], children=4, queue_wait=724ms
+2026-07-21T13:56:29.472697Z  INFO edge_manager::proof_state::result_handler: Batch [52-55] not yet complete, missing segment 53
+2026-07-21T13:56:29.472708Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.472712Z  INFO edge_manager::scheduler: Worker 4 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.472714Z  INFO edge_manager::scheduler: Worker 4 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.477340Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 4 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[12, 15], children=4, queue_wait=682ms
+2026-07-21T13:56:29.516893Z  INFO edge_manager::proof_state::result_handler: Batch [60-61] not yet complete, missing segment 60
+2026-07-21T13:56:29.516901Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.516905Z  INFO edge_manager::scheduler: Worker 13 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.516907Z  INFO edge_manager::scheduler: Worker 13 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.517228Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [4-7]
+2026-07-21T13:56:29.517267Z  INFO edge_manager::proof_state::result_handler: Leaf group [0-2] not yet complete, missing leaf 0
+2026-07-21T13:56:29.517271Z  INFO edge_manager::handlers: Received result from worker 14: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.519096Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 13 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[24, 27], children=4, queue_wait=652ms
+2026-07-21T13:56:29.551637Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [0-3]
+2026-07-21T13:56:29.551760Z  INFO edge_manager::proof_state::result_handler: Leaf group [0-2] not yet complete, missing leaf 2
+2026-07-21T13:56:29.551764Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.585503Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] not yet complete, missing segment 37
+2026-07-21T13:56:29.585507Z  INFO edge_manager::handlers: Received result from worker 7: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.585510Z  INFO edge_manager::scheduler: Worker 7 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.585512Z  INFO edge_manager::scheduler: Worker 7 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.609795Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [20-23]
+2026-07-21T13:56:29.609829Z  INFO edge_manager::proof_state::result_handler: Leaf group [3-5] not yet complete, missing leaf 3
+2026-07-21T13:56:29.609831Z  INFO edge_manager::handlers: Received result from worker 15: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.613220Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] not yet complete, missing segment 48
+2026-07-21T13:56:29.613225Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.619173Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] not yet complete, missing segment 32
+2026-07-21T13:56:29.619191Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.619197Z  INFO edge_manager::scheduler: Worker 3 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.619199Z  INFO edge_manager::scheduler: Worker 3 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.627136Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [28-31]
+2026-07-21T13:56:29.627174Z  INFO edge_manager::proof_state::result_handler: Leaf group [6-8] not yet complete, missing leaf 6
+2026-07-21T13:56:29.627176Z  INFO edge_manager::handlers: Received result from worker 6: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.654948Z  INFO edge_manager::proof_state::result_handler: Batch [60-61] complete! Creating leaf proof request with 2 app proofs
+2026-07-21T13:56:29.654953Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.654964Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 3: active_count=0
+2026-07-21T13:56:29.655665Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 3 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[60, 61], children=2, queue_wait=1ms
+2026-07-21T13:56:29.675466Z  INFO edge_manager::proof_state::result_handler: Batch [56-59] not yet complete, missing segment 58
+2026-07-21T13:56:29.675473Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.693727Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [16-19]
+2026-07-21T13:56:29.693763Z  INFO edge_manager::proof_state::result_handler: Leaf group [3-5] not yet complete, missing leaf 3
+2026-07-21T13:56:29.693766Z  INFO edge_manager::handlers: Received result from worker 8: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.725669Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [12-15]
+2026-07-21T13:56:29.725813Z  INFO edge_manager::proof_state::result_handler: Leaf group [3-5] complete! Creating internal proof for layer 0 with 3 child proofs, segments [12-23]
+2026-07-21T13:56:29.725817Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.727031Z  INFO edge_manager::handlers: Sending internal_prove work to worker 4 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=0, segments=[12, 23], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:29.751928Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] not yet complete, missing segment 49
+2026-07-21T13:56:29.751945Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.757489Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] not yet complete, missing segment 33
+2026-07-21T13:56:29.757496Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.757499Z  INFO edge_manager::scheduler: Worker 0 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.757501Z  INFO edge_manager::scheduler: Worker 0 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.770706Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [24-27]
+2026-07-21T13:56:29.770809Z  INFO edge_manager::proof_state::result_handler: Leaf group [6-8] not yet complete, missing leaf 8
+2026-07-21T13:56:29.770812Z  INFO edge_manager::handlers: Received result from worker 13: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.780527Z  INFO edge_manager::proof_state::result_handler: Batch [44-47] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:29.780532Z  INFO edge_manager::handlers: Received result from worker 12: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.780534Z  INFO edge_manager::scheduler: Worker 12 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.780536Z  INFO edge_manager::scheduler: Worker 12 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.780544Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 0: active_count=0
+2026-07-21T13:56:29.783733Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[44, 47], children=4, queue_wait=3ms
+2026-07-21T13:56:29.793813Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [60-61]
+2026-07-21T13:56:29.793861Z  INFO edge_manager::proof_state::result_handler: Leaf group [15-15] complete! Creating internal proof for layer 0 with 1 child proofs, segments [60-61]
+2026-07-21T13:56:29.793865Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:29.794160Z  INFO edge_manager::handlers: Sending internal_prove work to worker 3 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=0, segments=[60, 61], children=1, is_final=false, queue_wait=1ms
+2026-07-21T13:56:29.844938Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] not yet complete, missing segment 41
+2026-07-21T13:56:29.844943Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.848868Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] not yet complete, missing segment 43
+2026-07-21T13:56:29.848875Z  INFO edge_manager::handlers: Received result from worker 9: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.848878Z  INFO edge_manager::scheduler: Worker 9 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.848879Z  INFO edge_manager::scheduler: Worker 9 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.849264Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] not yet complete, missing segment 11
+2026-07-21T13:56:29.849267Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.866244Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] not yet complete, missing segment 33
+2026-07-21T13:56:29.866254Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.868503Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] not yet complete, missing segment 49
+2026-07-21T13:56:29.868506Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.868508Z  INFO edge_manager::scheduler: Worker 2 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.868510Z  INFO edge_manager::scheduler: Worker 2 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.894424Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=60, segment_end=61
+2026-07-21T13:56:29.894461Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:29.908399Z  INFO edge_manager::proof_state::result_handler: Batch [52-55] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:29.908406Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.908418Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 2: active_count=0
+2026-07-21T13:56:29.910106Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 2 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[52, 55], children=4, queue_wait=2ms
+2026-07-21T13:56:29.910294Z  INFO edge_manager::proof_state::result_handler: Batch [48-51] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:29.910313Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.910332Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 3: active_count=0
+2026-07-21T13:56:29.913168Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 3 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[48, 51], children=4, queue_wait=3ms
+2026-07-21T13:56:29.919664Z  INFO edge_manager::proof_state::result_handler: Batch [36-39] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:29.919671Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:29.919675Z  INFO edge_manager::scheduler: Worker 5 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:29.919677Z  INFO edge_manager::scheduler: Worker 5 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:29.919691Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 5: active_count=0
+2026-07-21T13:56:29.919800Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=12, segment_end=23
+2026-07-21T13:56:29.919848Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:29.922622Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 5 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[36, 39], children=4, queue_wait=3ms
+2026-07-21T13:56:30.001649Z  INFO edge_manager::proof_state::result_handler: Batch [8-11] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:30.001669Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:30.001686Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 4: active_count=0
+2026-07-21T13:56:30.004775Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 4 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[8, 11], children=4, queue_wait=3ms
+2026-07-21T13:56:30.028864Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [44-47]
+2026-07-21T13:56:30.028914Z  INFO edge_manager::proof_state::result_handler: Leaf group [9-11] not yet complete, missing leaf 9
+2026-07-21T13:56:30.028919Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.052121Z  INFO edge_manager::proof_state::result_handler: Batch [32-35] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:30.052139Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:30.052145Z  INFO edge_manager::scheduler: Worker 1 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:30.052147Z  INFO edge_manager::scheduler: Worker 1 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:30.052161Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 0: active_count=0
+2026-07-21T13:56:30.055372Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[32, 35], children=4, queue_wait=3ms
+2026-07-21T13:56:30.062968Z  INFO edge_manager::proof_state::result_handler: Batch [56-59] not yet complete, missing segment 59
+2026-07-21T13:56:30.062975Z  INFO edge_manager::handlers: Received result from worker 10: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:30.062978Z  INFO edge_manager::scheduler: Worker 10 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:30.062979Z  INFO edge_manager::scheduler: Worker 10 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:30.141053Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [52-55]
+2026-07-21T13:56:30.141112Z  INFO edge_manager::proof_state::result_handler: Leaf group [12-14] not yet complete, missing leaf 12
+2026-07-21T13:56:30.141117Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.181285Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [36-39]
+2026-07-21T13:56:30.181362Z  INFO edge_manager::proof_state::result_handler: Leaf group [9-11] not yet complete, missing leaf 10
+2026-07-21T13:56:30.181366Z  INFO edge_manager::handlers: Received result from worker 5: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.184972Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [48-51]
+2026-07-21T13:56:30.185090Z  INFO edge_manager::proof_state::result_handler: Leaf group [12-14] not yet complete, missing leaf 14
+2026-07-21T13:56:30.185094Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.237140Z  INFO edge_manager::proof_state::result_handler: Batch [40-43] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:30.237148Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:30.237161Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 1: active_count=0
+2026-07-21T13:56:30.239158Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 1 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[40, 43], children=4, queue_wait=2ms
+2026-07-21T13:56:30.262275Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [8-11]
+2026-07-21T13:56:30.262443Z  INFO edge_manager::proof_state::result_handler: Leaf group [0-2] complete! Creating internal proof for layer 0 with 3 child proofs, segments [0-11]
+2026-07-21T13:56:30.262446Z  INFO edge_manager::handlers: Received result from worker 4: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.264122Z  INFO edge_manager::handlers: Sending internal_prove work to worker 2 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=0, segments=[0, 11], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:30.316205Z  INFO edge_manager::proof_state::result_handler: Batch [56-59] complete! Creating leaf proof request with 4 app proofs
+2026-07-21T13:56:30.316222Z  INFO edge_manager::handlers: Received result from worker 11: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=app
+2026-07-21T13:56:30.316228Z  INFO edge_manager::scheduler: Worker 11 completed all segments: expected=4, actual=4, total_segments=62
+2026-07-21T13:56:30.316230Z  INFO edge_manager::scheduler: Worker 11 completed all 4 segments for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7
+2026-07-21T13:56:30.316244Z  INFO edge_manager::scheduler: Assigning LeafProve to worker 3: active_count=0
+2026-07-21T13:56:30.317339Z  INFO edge_manager::handlers: Sending leaf_prove work to worker 3 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: segments=[56, 59], children=4, queue_wait=1ms
+2026-07-21T13:56:30.323775Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [32-35]
+2026-07-21T13:56:30.323909Z  INFO edge_manager::proof_state::result_handler: Leaf group [6-8] complete! Creating internal proof for layer 0 with 3 child proofs, segments [24-35]
+2026-07-21T13:56:30.323912Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.325182Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=0, segments=[24, 35], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:30.447879Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=0, segment_end=11
+2026-07-21T13:56:30.447978Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.498571Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [40-43]
+2026-07-21T13:56:30.498741Z  INFO edge_manager::proof_state::result_handler: Leaf group [9-11] complete! Creating internal proof for layer 0 with 3 child proofs, segments [36-47]
+2026-07-21T13:56:30.498748Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.500031Z  INFO edge_manager::handlers: Sending internal_prove work to worker 1 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=0, segments=[36, 47], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:30.504774Z  INFO edge_manager::proof_state::result_handler: Received leaf proof for segments [56-59]
+2026-07-21T13:56:30.504920Z  INFO edge_manager::proof_state::result_handler: Leaf group [12-14] complete! Creating internal proof for layer 0 with 3 child proofs, segments [48-59]
+2026-07-21T13:56:30.504927Z  INFO edge_manager::handlers: Received result from worker 3: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=leaf
+2026-07-21T13:56:30.506501Z  INFO edge_manager::handlers: Sending internal_prove work to worker 2 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=0, segments=[48, 59], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:30.506801Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=24, segment_end=35
+2026-07-21T13:56:30.506972Z  INFO edge_manager::proof_state::result_handler: Creating internal proof for layer 1 (from 3 child proofs at layer 0), segments 0-35, is_final_proof=false
+2026-07-21T13:56:30.506979Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.508972Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=1, segments=[0, 35], children=3, is_final=false, queue_wait=2ms
+2026-07-21T13:56:30.641695Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=1, segment_start=0, segment_end=35
+2026-07-21T13:56:30.641747Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.681228Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=36, segment_end=47
+2026-07-21T13:56:30.681310Z  INFO edge_manager::handlers: Received result from worker 1: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.685508Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=0, segment_start=48, segment_end=59
+2026-07-21T13:56:30.685621Z  INFO edge_manager::proof_state::result_handler: Creating internal proof for layer 1 (from 3 child proofs at layer 0), segments 36-61, is_final_proof=false
+2026-07-21T13:56:30.685628Z  INFO edge_manager::handlers: Received result from worker 2: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.686563Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=1, segments=[36, 61], children=3, is_final=false, queue_wait=1ms
+2026-07-21T13:56:30.812846Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=1, segment_start=36, segment_end=61
+2026-07-21T13:56:30.812926Z  INFO edge_manager::proof_state::result_handler: Creating internal proof for layer 2 (from 2 child proofs at layer 1), segments 0-61, is_final_proof=true
+2026-07-21T13:56:30.812932Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.813510Z  INFO edge_manager::handlers: Sending internal_prove work to worker 0 for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: layer=2, segments=[0, 61], children=2, is_final=true, queue_wait=1ms
+2026-07-21T13:56:30.976065Z  INFO edge_manager::proof_state::result_handler: Received internal proof: layer_idx=2, segment_start=0, segment_end=61
+2026-07-21T13:56:30.976093Z  INFO edge_manager::proof_state::result_handler: Proof ere-eb45cacd1e7f467392e9d10a8d4e33d7 is completed
+2026-07-21T13:56:30.976099Z  INFO edge_manager::handlers: Received result from worker 0: proof_uuid=ere-eb45cacd1e7f467392e9d10a8d4e33d7, kind=internal
+2026-07-21T13:56:30.976995Z  INFO edge_manager::handlers: Persisted final proof ere-eb45cacd1e7f467392e9d10a8d4e33d7 to /var/tmp/openvm-final-proofs/ere-eb45cacd1e7f467392e9d10a8d4e33d7.proof.bin
+2026-07-21T13:56:30.977733Z  INFO edge_manager::proof_state::metrics_report: Emitted metrics for proof ere-eb45cacd1e7f467392e9d10a8d4e33d7: e2e=4344ms, proving=4269ms, app=66763ms, leaf=3742ms, internal=1307ms, compress=71ms
+2026-07-21T13:56:30.982992Z  INFO edge_manager::handlers: Wrote metrics report to /data/metrics/ere-eb45cacd1e7f467392e9d10a8d4e33d7.md
+2026-07-21T13:56:30.986424Z  INFO edge_manager::handlers: Proof ere-eb45cacd1e7f467392e9d10a8d4e33d7 reached terminal state Completed, cleaning up scheduler state

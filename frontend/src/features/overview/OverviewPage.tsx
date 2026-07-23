@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { useBench } from '@/hooks/useBench';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { cx } from '@/utils/cx';
-import { ACTIVE_ACCENT, FOCUS_RING, PILL, PILL_IDLE } from '@/utils/styles';
+import { FOCUS_RING, PILL, PILL_IDLE } from '@/utils/styles';
 import { StatStrip, type StatItem } from '@/components/common/StatStrip';
 import { HardwareTable } from '@/components/common/HardwareTable';
 import { ChartPanel } from '@/components/common/ChartPanel';
@@ -18,7 +18,7 @@ import { ScatterLine } from '@/components/charts/ScatterLine';
 import { ProvingTimeHistogram } from '@/components/charts/ProvingTimeHistogram';
 import { PhaseBreakdownChart, type PhaseBreakdownRow } from '@/components/charts/PhaseBreakdownChart';
 import { PhaseTimingChart } from '@/components/charts/PhaseTimingChart';
-import { clusterPhaseSeries, meanClusterPhases } from '@/utils/phaseTimings';
+import { clusterPhaseSeries, hasOverlapPhases, meanClusterPhases, meanWindowPhases, type PhaseTimingMode } from '@/utils/phaseTimings';
 import { provingTimeBuckets, bucketRangeLabel, BUCKET_S } from '@/utils/provingTimeBuckets';
 import { buildPhaseRegistry } from '@/utils/phases';
 import { latestBlocks } from '@/utils/runs';
@@ -44,7 +44,6 @@ export function OverviewPage() {
   // The benchmark started when its first run did, the earliest start across the runs.
   const startedAt = useMemo(() => Math.min(...data.runs.map(r => r.started_at)), [data]);
 
-  const cluster = clusterPhaseSeries(blocks, registry);
   // Fixed default-width bucketing feeding the phase-breakdown rows, which stay coarse enough to read
   // as a table regardless of the histogram's bin toggle.
   const buckets = provingTimeBuckets(blocks);
@@ -73,13 +72,35 @@ export function OverviewPage() {
   const phaseChart = useMemo(() => clusterPhaseSeries(phaseChartBlocks, registry), [phaseChartBlocks, registry]);
 
   // One breakdown row for every block, then one per non-empty proving-time bucket from fastest to slowest.
-  const allBlocks: PhaseBreakdownRow = { label: 'All blocks', ...meanClusterPhases(blocks, registry) };
+  // An overlap preset takes the sum-based window math, whose phases plus a hatched Rest close each row at
+  // 100 percent, read by the header's per-node or cluster-total divisor. A presetless cluster keeps the
+  // stacked critical-path math and shows no divisor control.
+  const overlap = hasOverlapPhases(registry);
+  // Per node leads so a single-node phase reads its full mean instead of diluting across every node, a
+  // divisor the header's toggle button flips to cluster total.
+  const [phaseTimingMode, setPhaseTimingMode] = usePersistentState<PhaseTimingMode>('overview-phase-timing-mode', 'perNode');
+  const meanPhases = (bs: typeof blocks) =>
+    overlap ? meanWindowPhases(bs, registry, phaseTimingMode) : meanClusterPhases(bs, registry);
+  const allBlocks: PhaseBreakdownRow = { label: 'All blocks', ...meanPhases(blocks) };
   const bucketRows: PhaseBreakdownRow[] = buckets.byBucket.flatMap((ps, i) =>
-    ps.length ? [{ label: bucketRangeLabel(i, buckets.bucketS), ...meanClusterPhases(ps, registry) }] : []
+    ps.length ? [{ label: bucketRangeLabel(i, buckets.bucketS), ...meanPhases(ps) }] : []
   );
   // A blank zero-value row sets the All-blocks summary apart from the per-bucket rows below it.
-  const spacer: PhaseBreakdownRow = { label: '', phases: allBlocks.phases.map(p => ({ ...p, seconds: 0 })), total: 0 };
+  const spacer: PhaseBreakdownRow = { label: '', phases: allBlocks.phases.map(p => ({ key: p.key, label: p.label, seconds: 0 })), total: 0 };
   const phaseRows: PhaseBreakdownRow[] = bucketRows.length ? [allBlocks, spacer, ...bucketRows] : [allBlocks];
+
+  // An overlap preset stripes one band per consecutive overlap pair, each named in the subtitle from the preset.
+  const overlapPhases = registry.list.filter(p => p.overlap);
+  const bandLabels = overlapPhases.slice(1).map((p, k) => `${overlapPhases[k]!.label} + ${p.label}`).join(' and ');
+  // The lead sentence tracks the divisor. Cluster total reports pooled-time shares, per node reports the
+  // per-node means that keep a single-node phase at its full duration.
+  const breakdownLead =
+    phaseTimingMode === 'perNode'
+      ? 'Per-node mean time in each phase, so a single-node phase keeps its full duration.'
+      : 'Share of pooled worker-active time across all nodes.';
+  const breakdownSubtitle = overlap
+    ? `${breakdownLead} Striped bands mark ${bandLabels} overlapping. Rest is time unattributed.`
+    : 'Mean share of proving time per phase, with each phase ending when the last node finishes it.';
 
   const softwareItems: StatItem[] = [
     { label: 'zkVM', value: software.zkvm.name },
@@ -139,7 +160,21 @@ export function OverviewPage() {
           />
         </ChartPanel>
 
-        <ChartPanel title="Phase breakdown">
+        <ChartPanel
+          title="Phase Breakdown"
+          subtitle={breakdownSubtitle}
+          action={
+            overlap ? (
+              <button
+                type="button"
+                onClick={() => setPhaseTimingMode(m => (m === 'perNode' ? 'clusterTotal' : 'perNode'))}
+                className={cx(PILL, FOCUS_RING, PILL_IDLE)}
+              >
+                {phaseTimingMode === 'perNode' ? 'Mean' : 'Sum'}
+              </button>
+            ) : undefined
+          }
+        >
           <PhaseBreakdownChart rows={phaseRows} registry={registry} />
         </ChartPanel>
 
@@ -150,8 +185,7 @@ export function OverviewPage() {
             <button
               type="button"
               onClick={() => setSortByTime(v => !v)}
-              aria-pressed={sortByTime}
-              className={cx(PILL, FOCUS_RING, sortByTime ? ACTIVE_ACCENT : PILL_IDLE)}
+              className={cx(PILL, FOCUS_RING, PILL_IDLE)}
             >
               {sortByTime ? 'Sort by time' : 'Sort by name'}
             </button>
@@ -161,7 +195,7 @@ export function OverviewPage() {
         </ChartPanel>
 
         <ChartPanel title="Gas used vs proving time">
-          <ScatterLine blocks={blocks} cluster={cluster} registry={registry} height={300} />
+          <ScatterLine blocks={blocks} height={300} />
         </ChartPanel>
       </section>
     </div>

@@ -1,0 +1,23 @@
+{
+  "name": "eest__mainnet_25580606__block0",
+  "timestamp_completed": "2026-07-21T14:41:43.835972430Z",
+  "metadata": {
+    "block_index": 0,
+    "block_number": 25580606,
+    "block_used_gas": 36274211,
+    "chain_id": 1,
+    "fixture_format": "eest",
+    "network": "BPO2",
+    "opcode_count": {},
+    "original_test_name": "mainnet_25580606",
+    "source_path": "25580606.json"
+  },
+  "proving": {
+    "success": {
+      "output_matched": true,
+      "proof_size": 316119,
+      "proving_time_ms": 4851,
+      "verification_time_ms": 13
+    }
+  }
+}

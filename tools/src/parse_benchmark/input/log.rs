@@ -137,6 +137,8 @@ pub struct LogNode {
 pub struct PhaseDef {
     pub name: String,
     pub label: String,
+    /// An overlap phase runs concurrently with its neighbors.
+    pub overlap: bool,
 }
 
 /// One fine-pipeline item kind in a zkVM's ordered template, owned by the named preset phase. A
@@ -157,6 +159,17 @@ pub struct PipelineItem {
     pub kind: usize,
     pub first: (i64, Option<i64>),
     pub second: Option<(i64, Option<i64>)>,
+    pub meta: PipelineItemMeta,
+}
+
+/// Optional per-item metadata a backend reads from its logs, serialized as the wire row's trailing
+/// object and wholly omitted when every field is absent. The id numbers the item within its kind,
+/// and the heavy markers name the segment index of each side of a paired item, first segment zero.
+#[derive(Clone, Copy, Default, PartialEq)]
+pub struct PipelineItemMeta {
+    pub id: Option<i64>,
+    pub cpu_heavy: Option<usize>,
+    pub gpu_heavy: Option<usize>,
 }
 
 /// The leading hex run of a token, the canonical key the coordinator's truncated job id, a crash
