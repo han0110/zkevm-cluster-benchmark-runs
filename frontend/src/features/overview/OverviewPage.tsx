@@ -101,6 +101,11 @@ export function OverviewPage() {
   const breakdownSubtitle = overlap
     ? `${breakdownLead} Striped bands mark ${bandLabels} overlapping. Rest is time unattributed.`
     : 'Mean share of proving time per phase, with each phase ending when the last node finishes it.';
+  // The per-block chart plots the critical-path gap after the previous phase's cluster end, so under an
+  // overlap preset concurrent phases show only their non-overlapping remainder rather than a full duration.
+  const perBlockSubtitle = overlap
+    ? 'Each phase ends when the last node finishes it, so overlapping phases show only their critical-path time past the previous phase, not their full duration.'
+    : 'Each phase ends when the last node finishes it.';
 
   const softwareItems: StatItem[] = [
     { label: 'zkVM', value: software.zkvm.name },
@@ -180,7 +185,7 @@ export function OverviewPage() {
 
         <ChartPanel
           title="Phase breakdown per block"
-          subtitle="Each phase ends when the last node finishes it."
+          subtitle={perBlockSubtitle}
           action={
             <button
               type="button"

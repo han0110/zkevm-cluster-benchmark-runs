@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { fixture } from '@/test/fixture';
 import { openvmBenchmark, openvmBlock, openvmNode, win } from '@/test/openvmFixture';
 import { buildPhaseRegistry } from '@/utils/phases';
-import { hasOverlapPhases, meanWindowPhases, placedSegmentPieces, splitOverlap, traceLabelBaseSec } from '@/utils/phaseTimings';
+import { apportionPercents, hasOverlapPhases, meanWindowPhases, placedSegmentPieces, splitOverlap, traceLabelBaseSec } from '@/utils/phaseTimings';
 import type { PhaseMean, Span } from '@/utils/phaseTimings';
 import type { Block } from '@/types/benchmark';
 
@@ -64,7 +64,7 @@ describe('meanWindowPhases cluster total mode', () => {
 
   it('tiles the chain sequentially with two bands and Rest closing the row', () => {
     const blocks = [overlappingBlock];
-    const { phases, intersections } = meanWindowPhases(blocks, registryOf(blocks), 'clusterTotal');
+    const { phases } = meanWindowPhases(blocks, registryOf(blocks), 'clusterTotal');
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     // Input then metered tile end to end, then segment starts the first band's width before metered ends.
     expect(byKey['input']!.placed!.start).toBeCloseTo(0);
@@ -74,12 +74,6 @@ describe('meanWindowPhases cluster total mode', () => {
     // Recursion starts the second band's width before segment ends, so segment joins both bands.
     expect(byKey['recursion']!.placed!.start).toBeCloseTo(0.6282);
     expect(byKey['recursion']!.placed!.width).toBeCloseTo(0.2821);
-    expect(intersections.map(x => [x.firstKey, x.secondKey])).toEqual([
-      ['metered_execution', 'segment'],
-      ['segment', 'recursion'],
-    ]);
-    expect(intersections[0]!.ratio).toBeCloseTo(0.0641);
-    expect(intersections[1]!.ratio).toBeCloseTo(0.1538);
     // Wrap follows the chain and Rest fills the right end so the row closes at exactly one.
     expect(byKey['wrap']!.placed!.start).toBeCloseTo(0.9103);
     expect(byKey['rest']!.placed!.start).toBeCloseTo(0.9615);
@@ -109,7 +103,7 @@ describe('meanWindowPhases per node mode', () => {
     // by 4.1 s. Wrap's full per-node duration lifts its share to 0.0976, near twice its 0.0513 pooled-time
     // share, while segment keeps 0.4756.
     const blocks = [overlappingBlock];
-    const { phases, intersections } = meanWindowPhases(blocks, registryOf(blocks), 'perNode');
+    const { phases } = meanWindowPhases(blocks, registryOf(blocks), 'perNode');
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     expect(byKey['input']!.placed!.frac).toBeCloseTo(0.061);
     expect(byKey['metered_execution']!.placed!.frac).toBeCloseTo(0.2683);
@@ -122,8 +116,6 @@ describe('meanWindowPhases per node mode', () => {
     expect(byKey['metered_execution']!.placed!.start).toBeCloseTo(0.061);
     expect(byKey['segment']!.placed!.start).toBeCloseTo(0.2683);
     expect(byKey['recursion']!.placed!.start).toBeCloseTo(0.5976);
-    expect(intersections[0]!.ratio).toBeCloseTo(0.061);
-    expect(intersections[1]!.ratio).toBeCloseTo(0.1463);
     expect(byKey['wrap']!.placed!.start).toBeCloseTo(0.8659);
     expect(byKey['rest']!.placed!.start + byKey['rest']!.placed!.width).toBeCloseTo(1, 10);
   });
@@ -136,13 +128,12 @@ describe('meanWindowPhases per node mode', () => {
     const late = openvmNode([win(0, 500), win(500, 500), win(1000, 2000), win(2500, 1500), win(4000, 1000)]);
     const early = openvmNode([win(0, 500), win(500, 500), win(1000, 1500), win(2000, 1000), null]);
     const block = openvmBlock('b0', [late, early]);
-    const { phases, total, intersections } = meanWindowPhases([block], registryOf([block]));
+    const { phases, total } = meanWindowPhases([block], registryOf([block]));
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
     expect(total).toBeCloseTo(4);
     expect(byKey['rest']!.seconds).toBeCloseTo(0);
     expect(byKey['rest']!.placed!.frac).toBeCloseTo(0);
     expect(byKey['segment']!.placed!.frac).toBeCloseTo(0.3889);
-    expect(intersections.map(x => [x.firstKey, x.secondKey])).toEqual([['segment', 'recursion']]);
   });
 
   it('closes a single-block bucket to exactly one', () => {
@@ -171,56 +162,14 @@ describe('meanWindowPhases per node mode', () => {
 });
 
 describe('meanWindowPhases chain bands', () => {
-  it('names one band per consecutive overlap pair with segment joining both', () => {
-    // Segment overlaps metered for 0.25 s and recursion for 0.6 s per node, so it participates in both
-    // bands. Each band is measured per carrying node and normalized against the 4.1 s per-node row.
-    const { intersections } = meanWindowPhases([overlappingBlock], registryOf([overlappingBlock]));
-    expect(intersections).toHaveLength(2);
-    expect(intersections[0]).toMatchObject({ firstKey: 'metered_execution', secondKey: 'segment' });
-    expect(intersections[0]!.seconds).toBeCloseTo(0.25);
-    expect(intersections[0]!.ratio).toBeCloseTo(0.061);
-    expect(intersections[1]).toMatchObject({ firstKey: 'segment', secondKey: 'recursion' });
-    expect(intersections[1]!.seconds).toBeCloseTo(0.6);
-    expect(intersections[1]!.ratio).toBeCloseTo(0.1463);
-  });
-
-  it('divides each band by the nodes carrying it, not every data point', () => {
-    // One node overlaps segment with recursion for 0.4 s and a second runs them disjoint. Only the
-    // overlapping node carries that band, so its per-node mean is the full 0.4 s, not the 0.2 s dividing
-    // by both data points would give.
-    const overlapNode = openvmNode([win(0, 100), win(200, 200), win(400, 2000), win(2000, 1600), win(3600, 400)]);
-    const disjointNode = openvmNode([win(0, 200), win(200, 300), win(500, 500), win(2000, 1000), null]);
-    const block = openvmBlock('b0', [overlapNode, disjointNode]);
-    const { intersections } = meanWindowPhases([block], registryOf([block]), 'perNode');
-    const band = intersections.find(x => x.firstKey === 'segment' && x.secondKey === 'recursion')!;
-    expect(band.seconds).toBeCloseTo(0.4);
-  });
-
-  it('reports no band when every overlap pair is disjoint', () => {
+  it('tiles the row to one when every overlap pair is disjoint', () => {
     // Metered [0.1, 0.4] ends before segment [0.6, 1.0] starts, and segment ends before recursion
-    // [2.0, 3.0] starts, so neither pair carries an overlap.
+    // [2.0, 3.0] starts, so neither pair carries an overlap and no band is subtracted.
     const disjoint = openvmBlock('b0', [openvmNode([win(0, 100), win(100, 300), win(600, 400), win(2000, 1000), win(3000, 500)])]);
-    const { phases, intersections } = meanWindowPhases([disjoint], registryOf([disjoint]));
+    const { phases } = meanWindowPhases([disjoint], registryOf([disjoint]));
     const rest = phases.find(p => p.key === 'rest')!;
-    expect(intersections).toEqual([]);
     // With no band subtracted the phases still tile the row to exactly one.
     expect(rest.placed!.start + rest.placed!.width).toBeCloseTo(1, 10);
-  });
-
-  it('measures a contained window as the inner phase span', () => {
-    // Recursion [0.5, 3.0] contains segment [1.0, 2.0], so the segment/recursion band is the whole 1 s
-    // segment span, while metered [0.3, 1.2] overlaps segment for 0.2 s.
-    const contained = openvmBlock('b0', [openvmNode([win(0, 100), win(300, 900), win(1000, 1000), win(500, 2500), win(3000, 500)])]);
-    const { intersections } = meanWindowPhases([contained], registryOf([contained]));
-    const first = intersections.find(x => x.secondKey === 'segment')!;
-    const second = intersections.find(x => x.secondKey === 'recursion')!;
-    expect(first.seconds).toBeCloseTo(0.2);
-    expect(second.seconds).toBeCloseTo(1);
-    expect(second.ratio).toBeCloseTo(0.25);
-  });
-
-  it('reports no bands for a preset without overlap phases', () => {
-    expect(meanWindowPhases(fixture.runs[0]!.blocks, buildPhaseRegistry(fixture)).intersections).toEqual([]);
   });
 });
 
@@ -335,14 +284,21 @@ describe('overview phase breakdown pieces', () => {
   });
 
   it('labels a solid piece with its phase share less its own bands, not the full phase share', () => {
-    const { phases, intersections } = meanWindowPhases([overlappingBlock], registryOf([overlappingBlock]));
+    const { phases } = meanWindowPhases([overlappingBlock], registryOf([overlappingBlock]));
     const byKey = Object.fromEntries(phases.map(p => [p.key, p]));
-    const meteredSolid = rowPieces(phases).find(p => p.name === 'Metered Execution')!;
-    const meteredBand = intersections.find(x => x.secondKey === 'segment')!;
+    const pieces = rowPieces(phases);
+    const meteredSolid = pieces.find(p => p.name === 'Metered Execution')!;
+    const meteredBand = pieces.find(p => p.name === 'Metered Execution + Segment')!;
     // The metered solid piece is the metered phase share less the metered/segment band it shares, well
     // under its full phase share.
-    expect(meteredSolid.width).toBeCloseTo(byKey['metered_execution']!.placed!.frac - meteredBand.ratio, 10);
+    expect(meteredSolid.width).toBeCloseTo(byKey['metered_execution']!.placed!.frac - meteredBand.width, 10);
     expect(meteredSolid.width).toBeLessThan(byKey['metered_execution']!.placed!.frac);
+  });
+
+  it('apportions the row pieces so the label integers sum to exactly 100', () => {
+    const { phases } = meanWindowPhases([overlappingBlock], registryOf([overlappingBlock]));
+    const percents = apportionPercents(rowPieces(phases).map(p => p.width));
+    expect(percents.reduce((sum, v) => sum + v, 0)).toBe(100);
   });
 
   it('orders the pieces left to right with each band between its two phases', () => {
@@ -369,5 +325,31 @@ describe('traceLabelBaseSec', () => {
   it('marks a block reporting no proving time with a null base', () => {
     const crashed: Block = { ...overlappingBlock, status: 'crashed', proving_ms: null };
     expect(traceLabelBaseSec(crashed, registryOf([overlappingBlock]))).toBeNull();
+  });
+});
+
+describe('apportionPercents', () => {
+  it('rounds a set that naively totals 101 back to 100 by largest remainder', () => {
+    // Independent rounding of 33.5, 33.5, 33 gives 34 + 34 + 33 = 101. Hamilton floors to 99 then adds the
+    // single deficit point to the first largest remainder, closing the row at 100.
+    const out = apportionPercents([0.335, 0.335, 0.33]);
+    expect(out).toEqual([34, 33, 33]);
+    expect(out.reduce((sum, v) => sum + v, 0)).toBe(100);
+  });
+
+  it('keeps a zero entry at zero and still sums to 100', () => {
+    const out = apportionPercents([0.5, 0.5, 0]);
+    expect(out).toEqual([50, 50, 0]);
+    expect(out.reduce((sum, v) => sum + v, 0)).toBe(100);
+  });
+
+  it('sums to the rounded coverage when the fractions cover less than the whole', () => {
+    // Trace pieces cover only part of the proving time, so the percents honestly total that coverage
+    // rather than being inflated to 100.
+    expect(apportionPercents([0.4, 0.3]).reduce((sum, v) => sum + v, 0)).toBe(70);
+  });
+
+  it('returns all zeros for a zero-sum input', () => {
+    expect(apportionPercents([0, 0, 0])).toEqual([0, 0, 0]);
   });
 });

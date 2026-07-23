@@ -5,14 +5,12 @@
 
 import { StackedPhaseBars, type BarRow } from '@/components/charts/StackedPhaseBars';
 import type { PhaseRegistry } from '@/utils/phases';
-import { hasOverlapPhases, type PhaseIntersection, type PhaseMean } from '@/utils/phaseTimings';
+import { hasOverlapPhases, type PhaseMean } from '@/utils/phaseTimings';
 
 export interface PhaseBreakdownRow {
   label: string;
   phases: PhaseMean[];
   total: number;
-  // Measured mean overlap of each consecutive overlap-phase pair, present only for an overlap preset's rows.
-  intersections?: PhaseIntersection[];
 }
 
 export function PhaseBreakdownChart({
@@ -29,7 +27,6 @@ export function PhaseBreakdownChart({
   const barRows: BarRow[] = rows.map(r => ({
     label: r.label,
     segments: r.phases.map(p => ({ key: p.key, label: p.label, color: registry.color(p.key), seconds: p.seconds, placed: p.placed, hatched: p.hatched })),
-    intersections: r.intersections,
   }));
   // An overlap preset labels each rendered piece against the share-normalized row total of one, the piece
   // labeling the block trace uses, so every solid slice, striped band, and Rest reads its own share and

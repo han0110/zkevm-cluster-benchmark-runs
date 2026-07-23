@@ -150,6 +150,23 @@ export function placedSegmentPieces<T extends Span>(
   return { solid, striped };
 }
 
+// Largest-remainder (Hamilton) apportionment of fractions to whole percents. Each fraction floors to its
+// percent, then the points left to the input's rounded total go one at a time to the largest fractional
+// remainders. Fractions summing to one yield percents summing to 100, while a set covering less of the
+// whole sums to that rounded coverage. A zero-sum input returns all zeros.
+export function apportionPercents(fractions: number[]): number[] {
+  const total = fractions.reduce((sum, f) => sum + f, 0);
+  if (total <= 0) return fractions.map(() => 0);
+  const scaled = fractions.map(f => f * 100);
+  const result = scaled.map(Math.floor);
+  const deficit = Math.round(total * 100) - result.reduce((sum, v) => sum + v, 0);
+  const byRemainder = scaled
+    .map((v, i) => ({ i, remainder: v - Math.floor(v) }))
+    .sort((a, b) => b.remainder - a.remainder);
+  for (let k = 0; k < deficit && k < byRemainder.length; k++) result[byRemainder[k]!.i]! += 1;
+  return result;
+}
+
 export interface PhaseMean {
   key: string;
   label: string;
@@ -159,16 +176,6 @@ export interface PhaseMean {
   // Marks the Rest filler that closes an overlap-preset row, drawn as a hatched band the axis tooltip
   // still lists.
   hatched?: boolean;
-}
-
-// Measured overlap of the two concurrent phases, naming both keys so the striped region and its
-// tooltip row pair their colors. Seconds is the per-data-point mean overlap and ratio is the summed
-// overlap over the summed working spans, the share the phase percentages use.
-export interface PhaseIntersection {
-  firstKey: string;
-  secondKey: string;
-  seconds: number;
-  ratio: number;
 }
 
 // Whether the registry carries any overlap-flagged phase, the switch to window-ratio breakdown math.
@@ -269,7 +276,7 @@ export function meanWindowPhases(
   blocks: Block[],
   registry: PhaseRegistry,
   mode: PhaseTimingMode = 'perNode'
-): { phases: PhaseMean[]; total: number; intersections: PhaseIntersection[] } {
+): { phases: PhaseMean[]; total: number } {
   const phaseSum = registry.list.map(() => 0);
   // Node data points carrying each phase, the per-node divisor so a single-node phase keeps its full mean.
   const phaseCarry = registry.list.map(() => 0);
@@ -277,7 +284,8 @@ export function meanWindowPhases(
   const overlapIndices = registry.list.flatMap((phase, i) => (phase.overlap ? [i] : []));
   const pairs = consecutivePairs(overlapIndices);
   const pairSum = pairs.map(() => 0);
-  // Node data points carrying a positive overlap for each pair, that band's per-node divisor.
+  // Node data points where both phases of the pair are present, that band's per-node divisor, so a
+  // node running both phases disjointly weighs its zero overlap in like phaseCarry weighs each phase.
   const pairCarry = pairs.map(() => 0);
   let restSum = 0;
   let totalSum = 0;
@@ -304,7 +312,7 @@ export function meanWindowPhases(
       pairs.forEach(([first, second], k) => {
         const overlap = pairOverlapSeconds(windows[first]!, windows[second]!);
         pairSum[k]! += overlap;
-        if (overlap > 0) pairCarry[k]! += 1;
+        if (windows[first] && windows[second]) pairCarry[k]! += 1;
       });
       restSum += Math.max(0, nodeEnd - unionLength(present));
       totalSum += nodeEnd;
@@ -352,17 +360,5 @@ export function meanWindowPhases(
     placed: { start: end, width: Math.max(0, 1 - end), frac: restFrac },
     hatched: true,
   });
-  // One band per consecutive overlap pair that measured a positive overlap, each naming both phases so
-  // the striped region and its tooltip row pair their colors.
-  const intersections = pairs.flatMap<PhaseIntersection>(([first, second], k) =>
-    pairSum[k]! > 0
-      ? [{
-          firstKey: registry.list[first]!.name,
-          secondKey: registry.list[second]!.name,
-          seconds: bandSeconds[k]!,
-          ratio: bandPct[k]!,
-        }]
-      : []
-  );
-  return { phases, total, intersections };
+  return { phases, total };
 }

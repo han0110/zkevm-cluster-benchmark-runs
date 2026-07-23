@@ -4,11 +4,17 @@
 //! Every work item logs one completion line carrying its duration and sub-timings, so an item's
 //! window is the line timestamp minus the printed span with no bracket pairing and no dangling
 //! reconstruction. A dropped line is a missing item, never a corrupt one. Each worker additionally
-//! derives one metered-execution item per segment it sends for proving, each spanning the prior
-//! segment's send to this send and the first the parallel-coordinator announcement so its serial
-//! executor tiles without overlap, carrying the segment id, and records when it wrote the received
-//! input file, the node's input transfer ending at the last such
-//! write among its workers. Items are grouped by proof and by host node, the
+//! derives one metered-execution item per segment it sends for proving, carrying the segment id.
+//! When a segment carries its own executor loop-start log, its item spans that segment's start
+//! to its send, excluding the bounded-channel backpressure that follows the send. Older runs
+//! without the loop-start log fall back to tiling the serial executor's items from the prior
+//! segment's send, the first from the parallel-coordinator announcement, so the items tile
+//! without overlap and fold the backpressure in. The fallback's sends follow the round-robin
+//! sequence prover_id, prover_id + num_provers, and onward, so a recorded send that skips
+//! ahead marks an intermediate send the lossy capture dropped, dropping that segment's item
+//! rather than widening a neighbor's span. Each worker also records when it wrote the received
+//! input file, the node's input transfer ending at the last such write among its workers. Items
+//! are grouped by proof and by host node, the
 //! worker-{host}-gpu{gpu}.log file name placing each worker process on its host. The tracing span
 //! fields name the proof as proof_id on some functions and proof_uuid on others, and both are
 //! accepted.
@@ -107,8 +113,10 @@ static RE_WRAP: LazyLock<Regex> = LazyLock::new(|| {
 /// Matches the parallel-coordinator announcement each worker prints when it takes up a proof, the
 /// earliest worker-side moment of that worker's metered execution.
 static RE_COORDINATOR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"Parallel coordinator: prover_id=\d+, num_provers=\d+, max_app_provers=\d+\s*$")
-        .unwrap()
+    Regex::new(
+        r"Parallel coordinator: prover_id=(?P<prover_id>\d+), num_provers=(?P<num_provers>\d+), max_app_provers=\d+\s*$",
+    )
+    .unwrap()
 });
 
 /// Matches the segment-send line each worker prints when its executor dispatches a metered segment
@@ -117,15 +125,22 @@ static RE_SEND: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"Executor \(parallel\): sending segment (?P<i>\d+) for proving\s*$").unwrap()
 });
 
+/// Matches the per-iteration executor loop-start line newer runs print at the top of each metered
+/// step, carrying the segment about to be executed, the start of that segment's metered execution.
+static RE_START: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"Executor \(parallel\): starting segment (?P<i>\d+)\s*$").unwrap()
+});
+
 /// Anchor phrases of the work-item completion lines. A line carrying one that its full pattern
 /// then fails to match is fatal, so a worker format change cannot silently drop items.
-const ANCHORS: [&str; 8] = [
+const ANCHORS: [&str; 9] = [
     "proved segment ",
     "generated app proof for segment",
     "Generated leaf proof",
     "Generated internal proof:",
     "wrapped successfully",
     "Parallel coordinator:",
+    "starting segment ",
     "sending segment ",
     "Input file written to ",
 ];
@@ -159,6 +174,16 @@ pub fn load(logs_dir: &Path) -> crate::parse_benchmark::Result<WorkerData> {
     })
 }
 
+/// A worker's parallel-coordinator announcement for one proof, holding the moment its metered
+/// execution begins and the round-robin assignment its sent segments follow. The worker proves
+/// segment prover_id first, then prover_id + stride and every stride onward, stride being the run's
+/// num_provers.
+struct Announcement {
+    ts: i64,
+    prover_id: i64,
+    stride: i64,
+}
+
 /// Parses one ansi-stripped worker log into pipeline items, coordinator announcements, segment-send
 /// moments, and input-file-written times for the given node.
 pub(crate) fn parse_worker(
@@ -172,8 +197,9 @@ pub(crate) fn parse_worker(
     // Per-proof state local to this worker, one call being one worker log. The worker's first
     // announcement starts its first metered-execution item, each later item starts at the prior
     // segment's send, and each segment it sends closes one such item at that segment's id.
-    let mut coordinator: BTreeMap<String, i64> = BTreeMap::new();
+    let mut coordinator: BTreeMap<String, Announcement> = BTreeMap::new();
     let mut sent: BTreeMap<String, Vec<(i64, i64)>> = BTreeMap::new();
+    let mut started: BTreeMap<String, BTreeMap<i64, i64>> = BTreeMap::new();
     for line in clean.lines() {
         // Every extracted line carries the edge_worker target, which cheaply skips the bulk GPU
         // memory telemetry emitted under other targets.
@@ -217,18 +243,23 @@ pub(crate) fn parse_worker(
             let end = line_end_ms(line)?;
             let t = capi(&c, "t");
             push(items, line, node, span_item(WRAP, end - t, end, None))?;
-        } else if RE_COORDINATOR.is_match(line) {
+        } else if let Some(c) = RE_COORDINATOR.captures(line) {
             let ts = line_end_ms(line)?;
             let job = proof_id(line)?.to_string();
             // The earliest announcement per proof and node starts the node's metered execution,
-            // while the worker's own first announcement starts every metered item it derives.
+            // while the worker's own first announcement starts every metered item it derives and
+            // carries the round-robin assignment those items follow.
             let slot = announcements
                 .entry(job.clone())
                 .or_default()
                 .entry(node.to_string())
                 .or_insert(ts);
             *slot = (*slot).min(ts);
-            coordinator.entry(job).or_insert(ts);
+            coordinator.entry(job).or_insert(Announcement {
+                ts,
+                prover_id: capi(&c, "prover_id"),
+                stride: capi(&c, "num_provers"),
+            });
         } else if let Some(c) = RE_SEND.captures(line) {
             let ts = line_end_ms(line)?;
             let job = proof_id(line)?.to_string();
@@ -242,6 +273,13 @@ pub(crate) fn parse_worker(
                 .or_insert(ts);
             *slot = (*slot).max(ts);
             sent.entry(job).or_default().push((segment, ts));
+        } else if let Some(c) = RE_START.captures(line) {
+            let ts = line_end_ms(line)?;
+            let job = proof_id(line)?.to_string();
+            let segment = capi(&c, "i");
+            // The loop-start moment of a segment's metered execution, keyed by segment so the
+            // derivation reads the pure execution of each sent segment.
+            started.entry(job).or_default().insert(segment, ts);
         } else if let Some(c) = RE_WRITE.captures(line) {
             let ts = line_end_us(line)?;
             // The write follows the upload receipt, so the node's last write among its workers ends
@@ -261,23 +299,53 @@ pub(crate) fn parse_worker(
         }
     }
     // One derived metered-execution item per segment this worker sends for a proof it also
-    // announces, carrying the segment id it shares with the app segment of the same index. A single
-    // executor thread meters the worker's segments serially, so the items tile without overlap,
-    // each starting at the prior segment's send and the first at the announcement, which keeps
-    // the VM setup prologue on the first item. A worker missing its announcement derives
-    // nothing.
-    for (job, ts) in coordinator {
+    // announces, carrying the segment id it shares with the app segment of the same index. When a
+    // segment carries its own executor loop-start log, its item is that segment's own metered
+    // execution, from its start to its send, with the bounded-channel backpressure that follows the
+    // send excluded. Older runs without the loop-start log fall back to tiling the serial
+    // executor's items from the prior send, the first from the announcement, which keeps the VM
+    // setup prologue on the first item and folds the backpressure into each item. In the
+    // fallback the worker's sends follow the round-robin sequence prover_id, prover_id +
+    // stride, and onward, so a send that skips the expected next segment marks an intermediate
+    // send the lossy capture dropped. That segment's item is dropped rather than widening a
+    // neighbor's span, and the walk resyncs past it. A worker missing its announcement, or one
+    // with no sends, derives nothing. TODO: once every openvm run carries the starting-segment
+    // log, drop this send-diff fallback, the adjacency guard, and the prover_id/stride capture,
+    // and derive each metered item straight from [starting segment, sending segment].
+    for (job, announcement) in coordinator {
         let Some(segments) = sent.get(&job) else {
             continue;
         };
+        let job_started = started.get(&job);
+        let Announcement {
+            ts,
+            prover_id,
+            stride,
+        } = announcement;
         let node_items = items
             .entry(job)
             .or_default()
             .entry(node.to_string())
             .or_default();
-        let starts = std::iter::once(ts).chain(segments.iter().map(|&(_, send)| send));
-        for (&(segment, send), start) in segments.iter().zip(starts) {
-            node_items.push(span_item(METERED_EXECUTION, start, send, Some(segment)));
+        let mut expected = prover_id;
+        let mut prev = ts;
+        for &(segment, send) in segments {
+            if let Some(&start) = job_started.and_then(|m| m.get(&segment)) {
+                // Newer runs log the executor loop-start per segment, so the item is that segment's
+                // own metered execution, from its start to its send, with the
+                // bounded-channel backpressure (which follows the send) excluded.
+                // Each item is self-contained, so a dropped send simply omits that
+                // segment rather than needing the adjacency guard.
+                node_items.push(span_item(METERED_EXECUTION, start, send, Some(segment)));
+            } else if segment == expected {
+                // Older runs without the loop-start log fall back to tiling from the prior send,
+                // the announcement for the first, which folds the backpressure into
+                // each item. The guard still drops a segment whose prior send the
+                // lossy capture lost rather than widening it.
+                node_items.push(span_item(METERED_EXECUTION, prev, send, Some(segment)));
+            }
+            expected = segment + stride;
+            prev = send;
         }
     }
     Ok(())
@@ -583,6 +651,61 @@ mod tests {
     }
 
     #[test]
+    fn a_dropped_send_drops_its_item_rather_than_widening_a_neighbor() {
+        // The coordinator capture lost segment 16's send, so the worker's recorded sends jump from
+        // segment 0 to segment 32. Tiling both into one item would fabricate a window covering two
+        // metered intervals, so the guard drops segment 32's item and derives only segment 0's,
+        // from the announcement to its send.
+        let text = "\
+2026-07-21T13:56:22.253367Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Parallel coordinator: prover_id=0, num_provers=16, max_app_provers=2
+2026-07-21T13:56:22.421870Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): sending segment 0 for proving
+2026-07-21T13:56:22.990247Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): sending segment 32 for proving
+";
+        let items = items_of(text, "ere-6f8d9d31213b4238b586606bc0e6bb19");
+        let derived: Vec<_> = items
+            .iter()
+            .filter(|i| i.kind == METERED_EXECUTION)
+            .collect();
+        assert_eq!(derived.len(), 1);
+        let coord = ms("2026-07-21T13:56:22.253367Z");
+        let send0 = ms("2026-07-21T13:56:22.421870Z");
+        assert_eq!(derived[0].first, (coord, Some(send0)));
+        assert_eq!(derived[0].meta.id, Some(0));
+    }
+
+    #[test]
+    fn starting_segment_logs_drive_the_metered_item_excluding_backpressure() {
+        // Newer runs log the executor loop-start per segment, so each metered item spans that
+        // segment's own start to its send, and the bounded-channel backpressure that follows the
+        // send is excluded. Segment 16 starts at its own loop-start, not at segment 0's send, so
+        // the gap between send 0 and start 16 (backpressure plus the redundant re-execution) drops
+        // out of the item.
+        let text = "\
+2026-07-21T13:56:22.100000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Parallel coordinator: prover_id=0, num_provers=16, max_app_provers=2
+2026-07-21T13:56:22.150000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): starting segment 0
+2026-07-21T13:56:22.200000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): sending segment 0 for proving
+2026-07-21T13:56:22.400000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): starting segment 16
+2026-07-21T13:56:22.500000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): sending segment 16 for proving
+";
+        let items = items_of(text, "ere-6f8d9d31213b4238b586606bc0e6bb19");
+        let derived: Vec<_> = items
+            .iter()
+            .filter(|i| i.kind == METERED_EXECUTION)
+            .collect();
+        assert_eq!(derived.len(), 2);
+        let start0 = ms("2026-07-21T13:56:22.150000Z");
+        let send0 = ms("2026-07-21T13:56:22.200000Z");
+        let start16 = ms("2026-07-21T13:56:22.400000Z");
+        let send16 = ms("2026-07-21T13:56:22.500000Z");
+        assert_eq!(derived[0].first, (start0, Some(send0)));
+        assert_eq!(derived[0].meta.id, Some(0));
+        // The key assertion: segment 16 starts at its own start, not at send 0, so the
+        // [send0, start16] backpressure gap is excluded from the item.
+        assert_eq!(derived[1].first, (start16, Some(send16)));
+        assert_eq!(derived[1].meta.id, Some(16));
+    }
+
+    #[test]
     fn no_item_derives_without_the_announcement_or_without_a_send() {
         // A worker whose announcement line the capture dropped derives nothing from its sends, and
         // a worker that announced but sent no segment derives nothing either.
@@ -598,6 +721,29 @@ mod tests {
         // Newer builds print per-step VM setup timings during metered execution. The line carries
         // no completion anchor, so it parses without error and produces nothing.
         let line = "2026-07-21T13:56:22.410000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: VM setup: input_read=12ms, stdin=3ms, metered_ctx=1ms, vm_state=30ms, snapshot_clone=170ms, total=220ms";
+        let mut items = BTreeMap::new();
+        let mut announcements = BTreeMap::new();
+        let mut sends = BTreeMap::new();
+        let mut writes = BTreeMap::new();
+        parse_worker(
+            line,
+            "node1",
+            &mut items,
+            &mut announcements,
+            &mut sends,
+            &mut writes,
+        )
+        .unwrap();
+        assert!(
+            items.is_empty() && announcements.is_empty() && sends.is_empty() && writes.is_empty()
+        );
+    }
+
+    #[test]
+    fn a_starting_segment_line_alone_yields_no_item() {
+        // The executor loop-start marker is now recorded as a segment start into the local buffer,
+        // but without a matching send it produces no pipeline item and parses without error.
+        let line = "2026-07-21T13:56:22.400000Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Executor (parallel): starting segment 5";
         let mut items = BTreeMap::new();
         let mut announcements = BTreeMap::new();
         let mut sends = BTreeMap::new();
