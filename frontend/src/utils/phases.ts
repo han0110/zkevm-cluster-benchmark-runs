@@ -6,7 +6,7 @@
  */
 
 import type { Benchmark, Block } from '@/types/benchmark';
-import { resolveCssColorToHex } from '@/utils/color';
+import { resolveCssColorToHex, tints } from '@/utils/color';
 
 // Per-zkVM phase color presets, keyed by zkVM name then phase name, as index.css variables. zisk routes
 // its input lead-in to the muted fill, and prove avoids the maple-red reserved for the crash marker so
@@ -55,8 +55,26 @@ export interface PhaseEntry {
   overlap: boolean;
 }
 
+// One sub-phase of the fine STARK breakdown, colored as a tint of its owning coarse phase.
+export interface SubPhaseEntry {
+  name: string;
+  label: string;
+  // Owning coarse phase name, the tint source.
+  phase: string;
+  // Position in the template, matching a block's sub-phase row index.
+  index: number;
+  // Composite `${phase}::${name}`, the registry color lookup key unique across the two owners.
+  key: string;
+  color: string;
+}
+
+// The registry color lookup key for a sub-phase, unique across the segment and recursion owners.
+export const subPhaseKey = (phase: string, name: string): string => `${phase}::${name}`;
+
 export interface PhaseRegistry {
   list: PhaseEntry[];
+  // The sub-phase breakdown template with tint colors, empty when the run's logs carried no per-item spans.
+  subphases: SubPhaseEntry[];
   byName(name: string): PhaseEntry | undefined;
   color(name: string): string;
   label(name: string): string;
@@ -81,17 +99,46 @@ export function buildPhaseRegistry(benchmark: Benchmark): PhaseRegistry {
   }));
   const byName = new Map(list.map(entry => [entry.name, entry]));
 
+  const subphases = buildSubPhases(benchmark, byName);
+  const colorByKey = new Map<string, string>(list.map(entry => [entry.name, entry.color]));
+  for (const sub of subphases) colorByKey.set(sub.key, sub.color);
+
   const aggregatorPhase = deriveAggregatorPhase(benchmark, list);
 
   const registry: PhaseRegistry = {
     list,
+    subphases,
     byName: name => byName.get(name),
-    color: name => byName.get(name)?.color ?? '#888888',
+    color: name => colorByKey.get(name) ?? '#888888',
     label: name => byName.get(name)?.label ?? name,
     aggregatorPhase,
   };
   cache.set(benchmark, registry);
   return registry;
+}
+
+// The sub-phase template with tint colors, each coarse phase's sub-phases sharing a lightness ramp of
+// the parent color so the segment and recursion breakdowns read as shades of their bar. Empty when
+// the document carries no sub-phase template.
+function buildSubPhases(benchmark: Benchmark, byName: Map<string, PhaseEntry>): SubPhaseEntry[] {
+  const defs = benchmark.software.zkvm.subphases ?? [];
+  const counts = new Map<string, number>();
+  for (const def of defs) counts.set(def.phase, (counts.get(def.phase) ?? 0) + 1);
+  const ramps = new Map<string, string[]>();
+  for (const [phase, count] of counts) ramps.set(phase, tints(byName.get(phase)?.color ?? '#888888', count));
+  const seen = new Map<string, number>();
+  return defs.map((def, index) => {
+    const position = seen.get(def.phase) ?? 0;
+    seen.set(def.phase, position + 1);
+    return {
+      name: def.name,
+      label: def.label,
+      phase: def.phase,
+      index,
+      key: subPhaseKey(def.phase, def.name),
+      color: ramps.get(def.phase)?.[position] ?? '#888888',
+    };
+  });
 }
 
 // Finds the last phase present on some but not all nodes of a block, the aggregator-only phase. The

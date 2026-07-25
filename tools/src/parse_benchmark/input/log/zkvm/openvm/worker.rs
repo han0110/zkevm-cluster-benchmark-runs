@@ -27,7 +27,10 @@ use crate::parse_benchmark::input::{
         PipelineItem, PipelineItemMeta, Ts,
         zkvm::{
             cap,
-            openvm::phases::{APP_SEGMENT, EXECUTION, FASTFWD, INTERNAL, LEAF, WRAP},
+            openvm::phases::{
+                APP_SEGMENT, EXECUTION, FASTFWD, INTERNAL, LEAF, RECURSION_OWNER, SEGMENT_OWNER,
+                WRAP, owner_span_rows,
+            },
             strip_ansi,
         },
     },
@@ -78,28 +81,43 @@ static RE_WRITE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"Input file written to "[^"]*edge_(?P<job>[^/"]+)/input\.bin"\s*$"#).unwrap()
 });
 
+/// The optional trailing spans field a patched edge worker appends to a completion line, a brace
+/// map of drained span names to integer milliseconds. An entry never holds a comma, equals sign, or
+/// brace, so each parses as a name and a value, the map is empty when the item drained no spans,
+/// and the whole field is absent on an unpatched log. A line carrying a malformed blob matches
+/// neither form and falls to the anchored-line fatal path.
+const SPANS_SUFFIX: &str = r"(?:, spans=\{(?P<spans>(?:[^,=}]+=\d+(?:,[^,=}]+=\d+)*)?)\})?";
+
+/// Matches one entry of a spans map, a drained span name and its integer millisecond value.
+static SPAN_ENTRY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([^,=}]+)=(\d+)").unwrap());
+
 /// Matches an app segment completion line from any of the three consumer variants, carrying the
 /// segment index and its fast-forward and total prove spans. The prove span holds the fast-forward
-/// followed by the STARK.
+/// followed by the STARK, whose sub-steps ride the optional spans field.
 static RE_APP: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?:Coordinator-consumer: proved|Consumer: proved|Prover: generated app proof for) segment (?P<i>\d+): queue_wait=\d+ms, fastfwd=(?P<f>\d+)ms, stark=\d+ms, prove=(?P<p>\d+)ms\s*$",
-    )
+    Regex::new(&format!(
+        r"(?:Coordinator-consumer: proved|Consumer: proved|Prover: generated app proof for) segment (?P<i>\d+): queue_wait=\d+ms, fastfwd=(?P<f>\d+)ms, stark=\d+ms, prove=(?P<p>\d+)ms{SPANS_SUFFIX}\s*$",
+    ))
     .unwrap()
 });
 
-/// Matches a leaf aggregation completion line, carrying its start segment.
+/// Matches a leaf aggregation completion line, carrying its start segment and the optional spans
+/// field of its STARK sub-steps.
 static RE_LEAF: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"Generated leaf proof for segments \[(?P<a>\d+), \d+\] \((?P<t>\d+)ms\)\s*$")
-        .unwrap()
+    Regex::new(&format!(
+        r"Generated leaf proof for segments \[(?P<a>\d+), \d+\] \((?P<t>\d+)ms\){SPANS_SUFFIX}\s*$",
+    ))
+    .unwrap()
 });
 
 /// Matches an internal aggregation completion line. The compress span is the final wrap on the
-/// root proof and zero elsewhere, and it follows the prove span within the line's total.
+/// root proof and zero elsewhere, and it follows the prove span within the line's total. A final
+/// proof's spans field carries the merged internal and wrap sub-steps, so its durations can exceed
+/// the prove span.
 static RE_INTERNAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"Generated internal proof: layer=\d+, segment=\[\d+, \d+\], is_final=(?:true|false), prove=(?P<p>\d+)ms, compress=(?P<c>\d+)ms\s*$",
-    )
+    Regex::new(&format!(
+        r"Generated internal proof: layer=\d+, segment=\[\d+, \d+\], is_final=(?:true|false), prove=(?P<p>\d+)ms, compress=(?P<c>\d+)ms{SPANS_SUFFIX}\s*$",
+    ))
     .unwrap()
 });
 
@@ -215,7 +233,13 @@ pub(crate) fn parse_worker(
                 items,
                 line,
                 node,
-                span_item(APP_SEGMENT, stark_start, end, Some(segment)),
+                with_spans(
+                    span_item(APP_SEGMENT, stark_start, end, Some(segment)),
+                    &c,
+                    SEGMENT_OWNER,
+                    end,
+                    line,
+                )?,
             )?;
         } else if let Some(c) = RE_LEAF.captures(line) {
             let end = line_end_ms(line)?;
@@ -226,7 +250,13 @@ pub(crate) fn parse_worker(
                 items,
                 line,
                 node,
-                span_item(LEAF, end - t, end, Some(capi(&c, "a"))),
+                with_spans(
+                    span_item(LEAF, end - t, end, Some(capi(&c, "a"))),
+                    &c,
+                    RECURSION_OWNER,
+                    end,
+                    line,
+                )?,
             )?;
         } else if let Some(c) = RE_INTERNAL.captures(line) {
             let end = line_end_ms(line)?;
@@ -237,7 +267,13 @@ pub(crate) fn parse_worker(
                 items,
                 line,
                 node,
-                span_item(INTERNAL, end - prove - compress, end - compress, None),
+                with_spans(
+                    span_item(INTERNAL, end - prove - compress, end - compress, None),
+                    &c,
+                    RECURSION_OWNER,
+                    end,
+                    line,
+                )?,
             )?;
         } else if let Some(c) = RE_WRAP.captures(line) {
             let end = line_end_ms(line)?;
@@ -337,6 +373,36 @@ fn span_item(kind: usize, start: i64, end: i64, id: Option<i64>) -> PipelineItem
             ..Default::default()
         },
     }
+}
+
+/// The given item carrying the STARK sub-step breakdown of its completion line, the optional spans
+/// field parsed into sub-phase template slots under the owner, matching the seven sub-step keys and
+/// ignoring the rest. An absent or empty field leaves the item's spans empty. The packing window
+/// runs from the item start to the line timestamp, wider than the item's own window for a final
+/// internal proof whose merged wrap timings ride past the prove span into the compress span. The
+/// pattern guarantees a digit run, so a value parses unless an adversarial one overflows u64, which
+/// is fatal like any other malformed content rather than silently zeroed.
+fn with_spans(
+    mut item: PipelineItem,
+    caps: &regex::Captures,
+    owner: usize,
+    end: i64,
+    line: &str,
+) -> crate::parse_benchmark::Result<PipelineItem> {
+    if let Some(blob) = caps.name("spans") {
+        let mut map: BTreeMap<&str, u64> = BTreeMap::new();
+        for m in SPAN_ENTRY.captures_iter(blob.as_str()) {
+            let value = m.get(2).unwrap().as_str().parse().map_err(|_| {
+                crate::parse_benchmark::ParseError::UnrecognizedWorkerLine(line.trim().to_string())
+            })?;
+            map.insert(m.get(1).unwrap().as_str(), value);
+        }
+        item.meta.spans = owner_span_rows(&map, owner);
+        if !item.meta.spans.is_empty() {
+            item.meta.spans_window = Some((item.first.0, end));
+        }
+    }
+    Ok(item)
 }
 
 /// The proof id the line's span names. A work line without a proof span field is fatal because
@@ -517,6 +583,156 @@ mod tests {
         let end = ms("2026-07-21T13:56:26.513683Z");
         assert_eq!(items[0].kind, INTERNAL);
         assert_eq!(items[0].first, (end - 88 - 69, Some(end - 69)));
+    }
+
+    #[test]
+    fn a_new_format_app_line_parses_its_stark_sub_step_breakdown() {
+        // A synthetic line in the patched worker format, its trailing spans field carrying the
+        // seven STARK sub-steps under their drained span keys, sorted lexicographically, alongside
+        // parent and extra spans the parser ignores, one holding spaces, an apostrophe, and a
+        // greater-than. The breakdown lands on the app segment, the STARK it measures, resolved
+        // into the segment-owner template slots in execution order, while the fast-forward
+        // carries none.
+        let line = "2026-07-21T13:56:24.477882Z  INFO app_consumer{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 consumer_idx=1}: edge_worker::provers::sharded_app_prover::real_impl: Consumer: proved segment 16: queue_wait=0ms, fastfwd=4ms, stark=1483ms, prove=1487ms, spans={execute_preflight_time_ms=5,prover.main_trace_commit_time_ms=240,prover.openings_time_ms=130,prover.rap_constraints.logup_gkr_time_ms=40,prover.rap_constraints.mle_rounds_time_ms=90,prover.rap_constraints.round0_time_ms=20,prover.rap_constraints_time_ms=150,s'_0 -> s_0 cpu interpolations=12,stark_prove_excluding_trace_time_ms=1400,trace_gen_time_ms=620,vm.transport_init_memory_time_ms=8}";
+        let items = items_of(line, "ere-6f8d9d31213b4238b586606bc0e6bb19");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].kind, FASTFWD);
+        assert!(items[0].meta.spans.is_empty());
+        assert_eq!(items[1].kind, APP_SEGMENT);
+        assert_eq!(
+            items[1].meta.spans,
+            vec![
+                [0, 5],
+                [1, 620],
+                [2, 240],
+                [3, 40],
+                [4, 20],
+                [5, 90],
+                [6, 130]
+            ]
+        );
+    }
+
+    #[test]
+    fn a_new_format_leaf_line_parses_its_breakdown_into_the_recursion_slots() {
+        // A synthetic leaf line in the patched worker format. Its spans resolve into the
+        // recursion-owner slots, the seven sub-steps offset by seven.
+        let line = "2026-07-21T13:56:25.046890Z  INFO prove_leaf_with_prover{proof_id=ere-aaaabbbbccccddddeeeeffff00001111 segment_start=16 segment_end=19 num_app_proofs=4}: edge_worker::provers::leaf_prover::real_impl: Generated leaf proof for segments [16, 19] (221ms), spans={execute_preflight_time_ms=4,prover.main_trace_commit_time_ms=45,prover.openings_time_ms=30,prover.rap_constraints.logup_gkr_time_ms=10,prover.rap_constraints.mle_rounds_time_ms=18,prover.rap_constraints.round0_time_ms=6,trace_gen_time_ms=120}";
+        let items = items_of(line, "ere-aaaabbbbccccddddeeeeffff00001111");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, LEAF);
+        assert_eq!(
+            items[0].meta.spans,
+            vec![
+                [7, 4],
+                [8, 120],
+                [9, 45],
+                [10, 10],
+                [11, 6],
+                [12, 18],
+                [13, 30]
+            ]
+        );
+    }
+
+    #[test]
+    fn a_final_internal_line_stores_merged_spans_exceeding_the_prove_span() {
+        // A synthetic final internal line in the patched worker format. The wrap re-runs the VM
+        // prove and its drained spans merge into the internal map under the same keys, so the
+        // sub-step sum can exceed the prove span, which the parser stores verbatim into the
+        // recursion slots for the frontend to scale.
+        let line = "2026-07-21T13:56:26.513683Z  INFO prove_internal_with_prover{proof_id=ere-aaaabbbbccccddddeeeeffff00001111 layer_idx=2 segment_start=0 segment_end=51 is_final=true num_child_proofs=2}: edge_worker::provers::internal_prover::real_impl: Generated internal proof: layer=2, segment=[0, 51], is_final=true, prove=88ms, compress=69ms, spans={execute_preflight_time_ms=3,prover.main_trace_commit_time_ms=30,prover.openings_time_ms=20,prover.rap_constraints.logup_gkr_time_ms=8,prover.rap_constraints.mle_rounds_time_ms=12,prover.rap_constraints.round0_time_ms=5,trace_gen_time_ms=110}";
+        let items = items_of(line, "ere-aaaabbbbccccddddeeeeffff00001111");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, INTERNAL);
+        assert_eq!(
+            items[0].meta.spans,
+            vec![
+                [7, 3],
+                [8, 110],
+                [9, 30],
+                [10, 8],
+                [11, 5],
+                [12, 12],
+                [13, 20]
+            ]
+        );
+        // The packing window runs from the item start to the line timestamp, past the item's own
+        // end by the compress span, so the merged wrap sub-steps ride into the compress region
+        // rather than overflowing the prove span.
+        let line_end = ms("2026-07-21T13:56:26.513683Z");
+        assert_eq!(
+            items[0].meta.spans_window,
+            Some((line_end - 88 - 69, line_end))
+        );
+        // The merged trace_gen alone exceeds the prove span the item covers, the overflow the
+        // component packing scales to fit.
+        let (start, end) = items[0].first;
+        assert!(items[0].meta.spans[1][1] as i64 > end.unwrap() - start);
+    }
+
+    #[test]
+    fn an_empty_spans_map_yields_no_breakdown() {
+        // A segment proved with no drained spans still renders the field, an empty map, so the line
+        // parses and the app segment simply carries no breakdown.
+        let line = "2026-07-21T13:56:22.806865Z  INFO coordinate_parallel_prove{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 num_provers=16}: edge_worker::provers::sharded_app_prover::real_impl: Coordinator-consumer: proved segment 0: queue_wait=0ms, fastfwd=0ms, stark=384ms, prove=384ms, spans={}";
+        let items = items_of(line, "ere-6f8d9d31213b4238b586606bc0e6bb19");
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().all(|i| i.meta.spans.is_empty()));
+    }
+
+    #[test]
+    fn an_old_format_line_parses_with_no_breakdown() {
+        // An unpatched-image line carries no spans field, so it parses as before and its items hold
+        // no breakdown, the backward-compatibility the committed fixtures also cover.
+        let line = "2026-07-21T13:56:24.477882Z  INFO app_consumer{proof_id=ere-6f8d9d31213b4238b586606bc0e6bb19 prover_id=0 consumer_idx=1}: edge_worker::provers::sharded_app_prover::real_impl: Consumer: proved segment 16: queue_wait=0ms, fastfwd=4ms, stark=1483ms, prove=1487ms";
+        let items = items_of(line, "ere-6f8d9d31213b4238b586606bc0e6bb19");
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().all(|i| i.meta.spans.is_empty()));
+    }
+
+    #[test]
+    fn a_malformed_spans_blob_is_fatal() {
+        // An otherwise-matching completion line whose spans blob is malformed, an entry missing its
+        // value, matches neither form, so the anchored line falls to the fatal path rather than
+        // silently dropping the breakdown.
+        let line = "2026-07-21T13:56:24.477882Z  INFO app_consumer{proof_id=ere-6f8d prover_id=0 consumer_idx=1}: edge_worker::provers::sharded_app_prover::real_impl: Consumer: proved segment 16: queue_wait=0ms, fastfwd=4ms, stark=1483ms, prove=1487ms, spans={trace_gen_time_ms}";
+        let mut items = BTreeMap::new();
+        let mut announcements = BTreeMap::new();
+        let mut sends = BTreeMap::new();
+        let mut writes = BTreeMap::new();
+        let err = parse_worker(
+            line,
+            "node1",
+            &mut items,
+            &mut announcements,
+            &mut sends,
+            &mut writes,
+        )
+        .expect_err("the malformed spans blob must fail");
+        assert!(matches!(err, ParseError::UnrecognizedWorkerLine(_)));
+    }
+
+    #[test]
+    fn a_span_value_past_u64_is_fatal() {
+        // The pattern guarantees a digit run, so a span value only fails to parse on an adversarial
+        // overflow past u64, which is fatal like any other malformed content rather than silently
+        // zeroed.
+        let line = "2026-07-21T13:56:24.477882Z  INFO app_consumer{proof_id=ere-6f8d prover_id=0 consumer_idx=1}: edge_worker::provers::sharded_app_prover::real_impl: Consumer: proved segment 16: queue_wait=0ms, fastfwd=4ms, stark=1483ms, prove=1487ms, spans={trace_gen_time_ms=99999999999999999999999999}";
+        let mut items = BTreeMap::new();
+        let mut announcements = BTreeMap::new();
+        let mut sends = BTreeMap::new();
+        let mut writes = BTreeMap::new();
+        let err = parse_worker(
+            line,
+            "node1",
+            &mut items,
+            &mut announcements,
+            &mut sends,
+            &mut writes,
+        )
+        .expect_err("the overflowing span value must fail");
+        assert!(matches!(err, ParseError::UnrecognizedWorkerLine(_)));
     }
 
     #[test]

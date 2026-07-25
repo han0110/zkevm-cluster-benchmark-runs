@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fixture } from '@/test/fixture';
-import { buildPhaseRegistry } from '@/utils/phases';
+import { openvmBenchmark, openvmSubPhases } from '@/test/openvmFixture';
+import { buildPhaseRegistry, subPhaseKey } from '@/utils/phases';
 import { decodePipeline, hasPipeline, packRows, rowPitch, rowWindow } from '@/utils/pipelineItems';
 import type { Benchmark, Block, BlockNode, PipelineRowMeta, PipelineStep } from '@/types/benchmark';
 
@@ -393,5 +394,110 @@ describe('rowWindow', () => {
       expect(start).toBeGreaterThanOrEqual(0);
       expect(end).toBeLessThanOrEqual(total);
     }
+  });
+});
+
+// An openvm document whose pipeline carries the six base kinds and the fourteen sub-step component
+// kinds, plus the sub-phase template that tints the components.
+const COMPONENT_BASE_KINDS: PipelineStep[] = [
+  { name: 'execution', label: 'Metered Execution', phase: 'execution', paired: false },
+  { name: 'fastfwd', label: 'Fast Forward', phase: 'execution', paired: false },
+  { name: 'app_segment', label: 'Segment', phase: 'segment', paired: false },
+  { name: 'leaf', label: 'Recursion', phase: 'recursion', paired: false },
+  { name: 'internal', label: 'Internal Aggregation', phase: 'recursion', paired: false },
+  { name: 'wrap', label: 'Wrap', phase: 'wrap', paired: false },
+];
+const componentBench: Benchmark = (() => {
+  const base = openvmBenchmark([], true);
+  const pipeline: PipelineStep[] = [
+    ...COMPONENT_BASE_KINDS,
+    ...openvmSubPhases.map(sub => ({ name: sub.name, label: sub.label, phase: sub.phase, paired: false })),
+  ];
+  return { ...base, software: { ...base.software, zkvm: { ...base.software.zkvm, pipeline } } };
+})();
+const componentRegistry = buildPhaseRegistry(componentBench);
+
+describe('decodePipeline sub-step components', () => {
+  it('colors a component by its sub-phase tint and reads its group', () => {
+    const block = withNodes([
+      node([
+        [6, 100, 5, { id: 4, group: 0 }],
+        [7, 105, 620, { id: 4, group: 0 }],
+        [0, 50, 40, { id: 4 }],
+      ]),
+    ]);
+    const model = decodePipeline(componentBench, block, nodes, componentRegistry);
+    const preflight = model.items.find(i => i.kind === 6)!;
+    expect(preflight.label).toBe('execute_preflight');
+    expect(preflight.phase).toBe('segment');
+    expect([preflight.id, preflight.group]).toEqual([4, 0]);
+    // The component colors by its sub-phase tint, the same the block-level split chart uses, not the
+    // flat owner color the monolithic segment bar would take.
+    expect(preflight.color).toBe(componentRegistry.color(subPhaseKey('segment', 'execute_preflight')));
+    expect(preflight.color).not.toBe(componentRegistry.color('segment'));
+    // A base kind keeps its flat phase color and carries no group.
+    const execution = model.items.find(i => i.kind === 0)!;
+    expect(execution.color).toBe(componentRegistry.color('execution'));
+    expect(execution.group).toBeUndefined();
+  });
+});
+
+describe('packRows sub-step components', () => {
+  it('packs the components of one group onto a single row in start order', () => {
+    const block = withNodes([
+      node([
+        [8, 725, 240, { id: 4, group: 0 }],
+        [6, 100, 5, { id: 4, group: 0 }],
+        [7, 105, 620, { id: 4, group: 0 }],
+        [13, 2000, 3, { group: 1 }],
+        [14, 2003, 97, { group: 1 }],
+      ]),
+    ]);
+    const rows = packRows(decodePipeline(componentBench, block, nodes, componentRegistry).items);
+    // One row per group, its components in start order, the groups ordered by earliest start.
+    expect(rows.map(r => r.items.map(i => i.kind))).toEqual([
+      [6, 7, 8],
+      [13, 14],
+    ]);
+    expect(rows[0]!.items.every(i => i.group === 0)).toBe(true);
+    expect(rows[1]!.items.every(i => i.group === 1)).toBe(true);
+  });
+
+  it('keeps a separate group on its own row even when its components share a kind and start', () => {
+    // Two proofs whose components share the same kind and start moment stay apart by group, so a
+    // leaf and an internal of the same recursion slot never read as one proof.
+    const block = withNodes([
+      node([
+        [13, 100, 5, { group: 0 }],
+        [13, 100, 5, { group: 1 }],
+      ]),
+    ]);
+    const rows = packRows(decodePipeline(componentBench, block, nodes, componentRegistry).items);
+    expect(rows.map(r => r.items.map(i => i.group))).toEqual([[0], [1]]);
+  });
+
+  it('folds a segment execution and fast-forward onto its component run on one row', () => {
+    // The row is composed as the monolithic segment was, the Metered Execution lead and the Fast
+    // Forward folding onto the app-segment component run by the shared segment id, while a leaf
+    // component run keeps its own row.
+    const block = withNodes([
+      node([
+        [0, 100, 50, { id: 4 }],
+        [1, 150, 5, { id: 4 }],
+        [6, 155, 5, { id: 4, group: 0 }],
+        [7, 160, 20, { id: 4, group: 0 }],
+        [8, 180, 30, { id: 4, group: 0 }],
+        [13, 2000, 3, { group: 1 }],
+        [14, 2003, 97, { group: 1 }],
+      ]),
+    ]);
+    const rows = packRows(decodePipeline(componentBench, block, nodes, componentRegistry).items);
+    expect(rows.map(r => r.items.map(i => i.name))).toEqual([
+      ['execution', 'fastfwd', 'execute_preflight', 'trace_gen', 'main_trace_commit'],
+      ['execute_preflight', 'trace_gen'],
+    ]);
+    // The merged segment row takes the execution start, the leaf run its own.
+    expect(rows[0]!.startSec).toBe(0.1);
+    expect(rows[1]!.startSec).toBe(2);
   });
 });

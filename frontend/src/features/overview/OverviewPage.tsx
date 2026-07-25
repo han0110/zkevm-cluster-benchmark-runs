@@ -18,7 +18,7 @@ import { ScatterLine } from '@/components/charts/ScatterLine';
 import { ProvingTimeHistogram } from '@/components/charts/ProvingTimeHistogram';
 import { PhaseBreakdownChart, type PhaseBreakdownRow } from '@/components/charts/PhaseBreakdownChart';
 import { PhaseTimingChart } from '@/components/charts/PhaseTimingChart';
-import { clusterPhaseSeries, hasOverlapPhases, meanClusterPhases, meanWindowPhases, type PhaseTimingMode } from '@/utils/phaseTimings';
+import { clusterPhaseSeries, expandSubPhases, hasOverlapPhases, meanClusterPhases, meanWindowPhases, type PhaseTimingMode } from '@/utils/phaseTimings';
 import { provingTimeBuckets, bucketRangeLabel, BUCKET_S } from '@/utils/provingTimeBuckets';
 import { buildPhaseRegistry } from '@/utils/phases';
 import { latestBlocks } from '@/utils/runs';
@@ -79,8 +79,11 @@ export function OverviewPage() {
   // Per node leads so a single-node phase reads its full mean instead of diluting across every node, a
   // divisor the header's toggle button flips to cluster total.
   const [phaseTimingMode, setPhaseTimingMode] = usePersistentState<PhaseTimingMode>('overview-phase-timing-mode', 'perNode');
+  // An overlap preset with a sub-phase template splits its segment and recursion bars into tinted
+  // sub-bars, computed from the same block population the bar's mean is, so the breakdown reads its
+  // STARK sub-steps. Without a template the expansion is a no-op.
   const meanPhases = (bs: typeof blocks) =>
-    overlap ? meanWindowPhases(bs, registry, phaseTimingMode) : meanClusterPhases(bs, registry);
+    overlap ? expandSubPhases(meanWindowPhases(bs, registry, phaseTimingMode), bs, registry) : meanClusterPhases(bs, registry);
   const allBlocks: PhaseBreakdownRow = { label: 'All blocks', ...meanPhases(blocks) };
   const bucketRows: PhaseBreakdownRow[] = buckets.byBucket.flatMap((ps, i) =>
     ps.length ? [{ label: bucketRangeLabel(i, buckets.bucketS), ...meanPhases(ps) }] : []

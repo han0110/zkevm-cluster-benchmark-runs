@@ -809,6 +809,24 @@ fn openvm_blocks_carry_pipeline_items() {
 }
 
 #[test]
+fn openvm_old_format_logs_carry_no_subphase_breakdown() {
+    // The committed openvm fixture logs predate the per-item spans field, so the run carries no
+    // sub-phase breakdown, the template staying empty and every block carrying no rows.
+    let b = parse_to_benchmark(&fixture_openvm_dir()).unwrap();
+    assert!(b.software.zkvm.subphases.is_empty());
+    assert!(b.runs[0].blocks.iter().all(|bl| bl.subphases.is_empty()));
+}
+
+#[test]
+fn zisk_document_carries_no_subphase_breakdown() {
+    // A zisk run's logs carry no per-item spans, so the sub-phase template stays empty and the zisk
+    // golden is unaffected.
+    let b = parse_to_benchmark(&fixture_dir()).unwrap();
+    assert!(b.software.zkvm.subphases.is_empty());
+    assert!(b.runs[0].blocks.iter().all(|bl| bl.subphases.is_empty()));
+}
+
+#[test]
 fn openvm_sidecars_skip_the_unlogged_block() {
     let dir = tempdir();
     let out = dir.join("benchmark.json");

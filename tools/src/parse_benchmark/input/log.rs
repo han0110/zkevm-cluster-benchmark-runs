@@ -152,10 +152,20 @@ pub struct PipelineDef {
     pub paired: bool,
 }
 
+/// One sub-phase of the fine STARK breakdown, a proving sub-step owned by a coarse phase. The
+/// segment and recursion phases each carry the full set, so `phase` names which coarse phase this
+/// entry breaks down.
+#[derive(Clone)]
+pub struct SubPhaseDef {
+    pub name: String,
+    pub label: String,
+    pub phase: String,
+}
+
 /// One fine pipeline item on a node, in absolute epoch milliseconds. The first segment is the
 /// witness of a paired kind or the sole segment of an unpaired one, and the second is the compute
 /// half of a pair. A None end marks a segment a crash left open.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct PipelineItem {
     pub kind: usize,
     pub first: (i64, Option<i64>),
@@ -163,14 +173,20 @@ pub struct PipelineItem {
     pub meta: PipelineItemMeta,
 }
 
-/// Optional per-item metadata a backend reads from its logs, serialized as the wire row's trailing
-/// object and wholly omitted when every field is absent. The id numbers the item within its kind,
-/// and the heavy markers name the segment index of each side of a paired item, first segment zero.
-#[derive(Clone, Copy, Default, PartialEq)]
+/// Optional per-item metadata a backend reads from its logs. The id numbers the item within its
+/// kind, the heavy markers name the segment index of each side of a paired item, first segment
+/// zero, spans holds the item's STARK sub-step breakdown as sub-phase-template [slot, ms] pairs,
+/// and spans_window is the absolute epoch-ms window the sub-steps pack into, wider than the item's
+/// own window for a final internal proof whose merged wrap timings ride past its prove span. The
+/// spans feed the block breakdown and are emitted as component pipeline rows in place of the item,
+/// so they never ride the item's own wire row.
+#[derive(Clone, Default, PartialEq)]
 pub struct PipelineItemMeta {
     pub id: Option<i64>,
     pub cpu_heavy: Option<usize>,
     pub gpu_heavy: Option<usize>,
+    pub spans: Vec<[u64; 2]>,
+    pub spans_window: Option<(i64, i64)>,
 }
 
 /// The canonical key a token shares across the coordinator log, a crash reason, and the worker

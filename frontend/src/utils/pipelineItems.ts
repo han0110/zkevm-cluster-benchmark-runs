@@ -7,7 +7,7 @@
  */
 
 import { msToSec } from '@/utils/format';
-import type { PhaseRegistry } from '@/utils/phases';
+import { subPhaseKey, type PhaseRegistry } from '@/utils/phases';
 import type { Benchmark, Block, PipelineRowMeta } from '@/types/benchmark';
 
 // One drawn span of an item. A dangling span never closed, so its end is the clamp, not a recorded
@@ -20,7 +20,8 @@ export interface PipelineSegment {
 
 // One decoded item, a row of the timeline. `segments` holds one span for a single-segment row and
 // [witness, compute] for a full pair, with the envelope start and end spanning them. The optional
-// wire metadata surfaces as the item's id and the segment index of its CPU and GPU heavy sides.
+// wire metadata surfaces as the item's id, the segment index of its CPU and GPU heavy sides, and the
+// per-node group a STARK sub-step component shares with its siblings so they pack onto one row.
 export interface PipelineItem {
   kind: number;
   // Stable kind key from the template, the identity the row packer matches on.
@@ -36,6 +37,7 @@ export interface PipelineItem {
   id?: number;
   cpuHeavy?: number;
   gpuHeavy?: number;
+  group?: number;
 }
 
 // A block's decoded pipeline. Items sort by start with node then kind tie-breaks, phasesUsed lists the
@@ -76,6 +78,14 @@ const validRow = (row: number[]): boolean =>
 // blanks the timeline.
 export function decodePipeline(bench: Benchmark, block: Block, nodes: string[], registry: PhaseRegistry): PipelineModel {
   const kinds = bench.software.zkvm.pipeline ?? [];
+  // A component kind names a STARK sub-step under its owner phase, so it colors by that sub-phase
+  // tint rather than the flat owner color, distinguishing the seven components and matching the
+  // block-level split chart. Every other kind colors by its phase.
+  const subKeys = new Set(registry.subphases.map(sub => sub.key));
+  const kindColor = (phase: string, name: string): string => {
+    const subKey = subPhaseKey(phase, name);
+    return subKeys.has(subKey) ? registry.color(subKey) : registry.color(phase);
+  };
 
   // The latest known moment of the block in ms, read from every node's phase ends, crash moment, and
   // completed pipeline segment ends.
@@ -110,7 +120,7 @@ export function decodePipeline(bench: Benchmark, block: Block, nodes: string[], 
         name: kind.name,
         label: kind.label,
         phase: kind.phase,
-        color: registry.color(kind.phase),
+        color: kindColor(kind.phase, kind.name),
         nodeIndex,
         nodeId: nodes[nodeIndex] ?? `node${nodeIndex + 1}`,
         segments,
@@ -119,6 +129,7 @@ export function decodePipeline(bench: Benchmark, block: Block, nodes: string[], 
         id: metaNumber(meta?.id),
         cpuHeavy: metaNumber(meta?.cpu_heavy),
         gpuHeavy: metaNumber(meta?.gpu_heavy),
+        group: metaNumber(meta?.group),
       });
     }
   });
@@ -131,44 +142,64 @@ export function decodePipeline(bench: Benchmark, block: Block, nodes: string[], 
 }
 
 // A waterfall row, the items painted on one y in left-to-right order. A merged row leads with the
-// execution and fast-forward bars ahead of the app_segment bar they precede, the segment's metering
-// and re-execution before its proof, while every other row holds its lone item. `startSec` is the
-// earliest item start, the key rows sort on.
+// execution and fast-forward bars ahead of the proof they precede, the segment's metering and
+// re-execution before its proof bar or sub-step components, while every other row holds its lone
+// item or its lone component run. `startSec` is the earliest item start, the key rows sort on.
 export interface PipelineRow {
   items: PipelineItem[];
   startSec: number;
 }
 
-// Packs decoded items into waterfall rows. The execution and fast-forward items of a segment fold
-// onto the row of the app_segment they lead, matched on the same node by equal metadata id, the
-// segment index all three carry. app_segment holds that id space alone, so the lookup targets it and
-// only the leads fold, the kind disambiguating which id leads. A lead that matches no segment keeps
-// its own row, defensive for logs with dropped lines. Row items sort by start, so metering leads the
-// re-execution leads the proof. Rows sort by earliest start with node then kind tie-breaks, so a
-// merged row takes its execution start and sorts ahead of the segment it leads.
+// Packs decoded items into waterfall rows, composed exactly as the monolithic bars were. A segment's
+// row holds its Metered Execution lead, Fast Forward, and its proof, matched on the same node by the
+// equal segment id the three carry. The proof is the monolithic app_segment on an old-format doc, or
+// the app-segment component run on a new-format one, the seven sub-steps of the same node and group,
+// so the leads fold onto the run exactly as they folded onto the bar. A leaf or internal component
+// run keeps its own row, the way its monolithic item did, subdivided into its sub-steps. Every other
+// item keeps its own row, including an execution or fast-forward whose segment the lossy capture
+// dropped. Row items sort by start, so metering leads the re-execution leads the proof, and rows sort
+// by earliest start with node then kind tie-breaks.
 export function packRows(items: PipelineItem[]): PipelineRow[] {
-  // app_segment items keyed by node and metadata id, the fold target an execution or fast-forward
-  // item on the same node and id claims.
-  const segmentById = new Map<string, PipelineItem>();
+  // The segments a row's execution and fast-forward leads fold onto, by node and segment id, an
+  // old-format doc's app_segment item or a new-format doc's app-segment component run, both under
+  // the segment id.
+  const segmentKeys = new Set<string>();
   for (const item of items) {
-    if (item.name === 'app_segment' && item.id != null) segmentById.set(`${item.nodeIndex}:${item.id}`, item);
+    const isSegment = item.group != null ? item.phase === 'segment' : item.name === 'app_segment';
+    if (isSegment && item.id != null) segmentKeys.add(`${item.nodeIndex}:${item.id}`);
   }
-  const leadsOf = new Map<PipelineItem, PipelineItem[]>();
-  const folded = new Set<PipelineItem>();
+
+  // The row each item belongs to. A component run gathers by node and group, its app-segment run
+  // sharing the segment id space so the leads fold onto it. An app_segment and its leads share the
+  // segment row, while everything else, a lead with no segment among it, keeps its own row.
+  let own = 0;
+  const rowKey = (item: PipelineItem): string => {
+    if (item.group != null) {
+      return item.phase === 'segment' && item.id != null
+        ? `seg:${item.nodeIndex}:${item.id}`
+        : `grp:${item.nodeIndex}:${item.group}`;
+    }
+    if (item.name === 'app_segment' && item.id != null) return `seg:${item.nodeIndex}:${item.id}`;
+    if (
+      (item.name === 'execution' || item.name === 'fastfwd') &&
+      item.id != null &&
+      segmentKeys.has(`${item.nodeIndex}:${item.id}`)
+    ) {
+      return `seg:${item.nodeIndex}:${item.id}`;
+    }
+    return `own:${own++}`;
+  };
+
+  const byRow = new Map<string, PipelineItem[]>();
   for (const item of items) {
-    if ((item.name !== 'execution' && item.name !== 'fastfwd') || item.id == null) continue;
-    const segment = segmentById.get(`${item.nodeIndex}:${item.id}`);
-    if (!segment) continue;
-    const leads = leadsOf.get(segment);
-    if (leads) leads.push(item);
-    else leadsOf.set(segment, [item]);
-    folded.add(item);
+    const key = rowKey(item);
+    const bucket = byRow.get(key);
+    if (bucket) bucket.push(item);
+    else byRow.set(key, [item]);
   }
   const rows: PipelineRow[] = [];
-  for (const item of items) {
-    if (folded.has(item)) continue;
-    const leads = leadsOf.get(item);
-    const rowItems = leads ? [...leads, item].sort((a, b) => a.startSec - b.startSec) : [item];
+  for (const bucket of byRow.values()) {
+    const rowItems = [...bucket].sort((a, b) => a.startSec - b.startSec);
     rows.push({ items: rowItems, startSec: rowItems[0]!.startSec });
   }
   return rows.sort(

@@ -95,6 +95,8 @@ impl ZkvmParser for OpenvmParser {
             name: "openvm",
             phases: openvm_phases(),
             pipeline: phases::openvm_pipeline(),
+            pipeline_components: phases::openvm_component_pipeline(),
+            subphases: phases::subphase_template(),
             logs,
         })
     }

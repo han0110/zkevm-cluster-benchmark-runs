@@ -4,7 +4,20 @@
  * then normalizing through culori.
  */
 
-import { formatHex } from 'culori';
+import { formatHex, oklch } from 'culori';
+
+// A ramp of `count` shades of a base hex, spread across a lightness band around the base so each
+// stays recognizably the parent hue, lightest first. Used to tint a coarse phase color across its
+// sub-phases without a bespoke palette. A single-entry ramp returns the base unchanged.
+export function tints(hex: string, count: number): string[] {
+  if (count <= 1) return count === 1 ? [hex] : [];
+  const base = oklch(hex);
+  if (!base) return Array.from({ length: count }, () => hex);
+  const band = 0.34;
+  const top = Math.min(0.9, (base.l ?? 0.6) + band / 2);
+  const step = band / (count - 1);
+  return Array.from({ length: count }, (_, i) => formatHex({ ...base, l: Math.max(0.2, top - step * i) }) ?? hex);
+}
 
 // Resolve any CSS color string (oklch, var(--x), rgb, named) to a 6-digit hex value.
 export function resolveCssColorToHex(color: string, fallback = '#000000'): string {

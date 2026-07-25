@@ -16,7 +16,7 @@ use crate::parse_benchmark::{
     },
     output::schema::{
         Benchmark, Block, BlockNode, Guest, Hardware, LogEntry, Metric, NodeStats, NodeTelemetry,
-        Phase, PhaseWindow, PipelineStep, Run, Software, Statistics, Telemetry, Zkvm,
+        Phase, PhaseWindow, PipelineStep, Run, Software, Statistics, SubPhase, Telemetry, Zkvm,
     },
 };
 
@@ -132,6 +132,8 @@ pub fn assemble(
         name: zkvm_name,
         phases,
         pipeline,
+        pipeline_components,
+        subphases,
         logs,
     } = parsed;
     let Sources {
@@ -141,6 +143,13 @@ pub fn assemble(
         dmon,
         raw_log,
     } = sources;
+
+    // A new-format run carries per-item log spans, gating both the extra breakdown templates and
+    // the component pipeline rows the spans emit in place of their monolithic items. The
+    // component kinds append after the base kinds, so a component of sub-phase slot i lands at
+    // base plus i.
+    let spans_present = any_log_spans(&logs);
+    let component_base = pipeline.len();
 
     let t0 = run_epoch(&logs, &dmon);
     // The node axis the whole document shares, the telemetry's node set falling back to the nodes
@@ -156,7 +165,15 @@ pub fn assemble(
         dmon.keys().map(|d| format!("node{d}")).collect()
     };
 
-    let out_blocks = build_blocks(&logs, &blocks, &node_ids, phases.len(), t0, &raw_log);
+    let out_blocks = build_blocks(
+        &logs,
+        &blocks,
+        &node_ids,
+        phases.len(),
+        t0,
+        &raw_log,
+        component_base,
+    );
     let telemetry = build_telemetry(&dmon, t0);
     let statistics = build_statistics(&out_blocks, &logs, &dmon, &node_ids);
 
@@ -206,8 +223,17 @@ pub fn assemble(
                         overlap: p.overlap,
                     })
                     .collect(),
+                // A new-format run appends the component kinds after the base kinds so their
+                // sub-step rows reference them, while an unpatched-image run keeps
+                // the base template alone.
                 pipeline: pipeline
                     .iter()
+                    .chain(
+                        spans_present
+                            .then_some(&pipeline_components)
+                            .into_iter()
+                            .flatten(),
+                    )
                     .map(|p| PipelineStep {
                         name: p.name.clone(),
                         label: p.label.clone(),
@@ -215,6 +241,21 @@ pub fn assemble(
                         paired: p.paired,
                     })
                     .collect(),
+                // The sub-phase template rides the document only when some block carries
+                // log-derived spans, so a run of unpatched-image logs, including every zisk run,
+                // keeps the prior schema.
+                subphases: if spans_present {
+                    subphases
+                        .iter()
+                        .map(|s| SubPhase {
+                            name: s.name.clone(),
+                            label: s.label.clone(),
+                            phase: s.phase.clone(),
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                },
             },
             guest: Guest {
                 name: meta.guest.unwrap_or_default(),
@@ -268,9 +309,14 @@ fn build_blocks(
     phase_count: usize,
     t0: i64,
     raw_log: &[RawLine],
+    component_base: usize,
 ) -> Vec<Block> {
     let matched = match_blocks_to_logs(logs, blocks);
     let starts = job_starts(raw_log);
+    let log_source = LogWindowSource {
+        raw_log,
+        starts: &starts,
+    };
     blocks
         .iter()
         .enumerate()
@@ -281,11 +327,18 @@ fn build_blocks(
                 node_ids,
                 phase_count,
                 t0,
-                raw_log,
-                &starts,
+                &log_source,
+                component_base,
             )
         })
         .collect()
+}
+
+/// The cluster-log slices a block's log window is cut from, the full timestamp-sorted lines and the
+/// per-job start instants derived from them, bundled since they travel together.
+struct LogWindowSource<'a> {
+    raw_log: &'a [RawLine],
+    starts: &'a [(i64, String)],
 }
 
 /// The job-start instants of the cluster log, each coordinator "[Job] Started" timestamp in
@@ -315,8 +368,8 @@ fn build_block(
     node_ids: &[String],
     phase_count: usize,
     t0: i64,
-    raw_log: &[RawLine],
-    starts: &[(i64, String)],
+    log_source: &LogWindowSource,
+    component_base: usize,
 ) -> Block {
     let start_abs = log
         .and_then(|l| l.t_start.map(Ts::epoch_ms).or_else(|| earliest_window(l)))
@@ -367,7 +420,9 @@ fn build_block(
             };
             BlockNode {
                 phases,
-                pipeline: log_node.map_or_else(Vec::new, |n| pipeline_rows(&n.items, start_abs)),
+                pipeline: log_node.map_or_else(Vec::new, |n| {
+                    pipeline_rows(&n.items, start_abs, component_base)
+                }),
                 crashed_ms,
                 crash_kind,
                 participated,
@@ -385,33 +440,128 @@ fn build_block(
         verification_time_ms: metric.verification_time_ms,
         meta: log.map(|l| l.meta.clone()).unwrap_or_default(),
         nodes,
-        logs: block_logs(log, raw_log, start_abs, metric, starts),
+        subphases: log.map_or_else(Vec::new, block_subphase_rows),
+        logs: block_logs(
+            log,
+            log_source.raw_log,
+            start_abs,
+            metric,
+            log_source.starts,
+        ),
     }
 }
 
-/// Encodes a node's pipeline items as wire rows rebased to the block start, each [kind, s, d, s2,
-/// d2] truncated where a segment dangles, so a dangling end is carried by arity rather than a
-/// sentinel. An item's metadata follows its integers as one trailing object, absent entirely on a
-/// metadata-free item, which therefore serializes as a pure integer row. Rows sort by start then
-/// kind.
-fn pipeline_rows(items: &[PipelineItem], start_abs: i64) -> Vec<Vec<Value>> {
+/// Whether any item across the run's logs carries a log-derived sub-phase breakdown, the condition
+/// under which the sub-phase template rides the document.
+fn any_log_spans(logs: &[Log]) -> bool {
+    logs.iter()
+        .flat_map(|l| &l.nodes)
+        .flat_map(|n| &n.items)
+        .any(|item| !item.meta.spans.is_empty())
+}
+
+/// Aggregates a block's per-item sub-phase spans into compact [slot, ms] rows referencing the
+/// sub-phase template, summing each template slot across every item that carries it, in slot order.
+/// The app segment items fill the segment slots and the leaf and internal items the recursion
+/// slots, their owners already resolved into the slot each pair names. A block whose items carry no
+/// spans yields no rows.
+fn block_subphase_rows(log: &Log) -> Vec<[u64; 2]> {
+    let mut sums: BTreeMap<u64, u64> = BTreeMap::new();
+    for item in log.nodes.iter().flat_map(|n| &n.items) {
+        for &[slot, ms] in &item.meta.spans {
+            *sums.entry(slot).or_insert(0) += ms;
+        }
+    }
+    sums.into_iter().map(|(slot, ms)| [slot, ms]).collect()
+}
+
+/// Encodes a node's pipeline items as wire rows rebased to the block start. A monolithic item is
+/// one [kind, s, d, s2, d2] row truncated where a segment dangles, so a dangling end is carried by
+/// arity rather than a sentinel, its metadata following the integers as one trailing object, absent
+/// entirely on a metadata-free item. An item carrying a STARK sub-step breakdown instead emits one
+/// component row per sub-step in place of its own row, so the monolithic segment, leaf, and
+/// internal bars never render, the components sharing a per-node group and the item's id so the
+/// frontend packs them onto one row. Rows sort by start then kind.
+fn pipeline_rows(items: &[PipelineItem], start_abs: i64, component_base: usize) -> Vec<Vec<Value>> {
     let mut sorted: Vec<&PipelineItem> = items.iter().collect();
     sorted.sort_by_key(|item| (item.first.0, item.kind));
-    sorted
-        .iter()
-        .map(|item| {
-            let mut cells = vec![item.kind as i64, item.first.0 - start_abs];
-            if let Some(end) = item.first.1 {
-                cells.push(end - item.first.0);
-                if let Some((start2, end2)) = item.second {
-                    cells.push(start2 - start_abs);
-                    if let Some(end2) = end2 {
-                        cells.push(end2 - start2);
-                    }
-                }
+    let mut rows: Vec<Vec<Value>> = Vec::new();
+    let mut group: u64 = 0;
+    for item in &sorted {
+        if item.meta.spans.is_empty() {
+            rows.push(monolithic_row(item, start_abs));
+        } else {
+            rows.extend(component_rows(item, start_abs, component_base, group));
+            group += 1;
+        }
+    }
+    rows.sort_by_key(|row| {
+        (
+            row[1].as_i64().unwrap_or(0),
+            row.first().and_then(Value::as_i64).unwrap_or(0),
+        )
+    });
+    rows
+}
+
+/// One monolithic item as a [kind, s, d, s2, d2] wire row truncated where a segment dangles, its
+/// metadata riding as one trailing object.
+fn monolithic_row(item: &PipelineItem, start_abs: i64) -> Vec<Value> {
+    let mut cells = vec![item.kind as i64, item.first.0 - start_abs];
+    if let Some(end) = item.first.1 {
+        cells.push(end - item.first.0);
+        if let Some((start2, end2)) = item.second {
+            cells.push(start2 - start_abs);
+            if let Some(end2) = end2 {
+                cells.push(end2 - start2);
             }
-            let mut row: Vec<Value> = cells.into_iter().map(Value::from).collect();
-            row.extend(metadata_object(item.meta));
+        }
+    }
+    let mut row: Vec<Value> = cells.into_iter().map(Value::from).collect();
+    row.extend(metadata_object(&item.meta));
+    row
+}
+
+/// The component rows of a sub-step-carrying item, one [kind, s, d, {id, g}] row per sub-step
+/// packed contiguously across the item's spans window in slot order. Each component kind is the
+/// component base plus the sub-step's template slot. A merged final-internal breakdown can overrun
+/// its window, so the sub-steps scale to fit and never draw past it, while a normal breakdown packs
+/// at its exact durations leaving the untimed residual as a trailing gap. Cumulative rounding keeps
+/// the components touching and inside the window.
+fn component_rows(
+    item: &PipelineItem,
+    start_abs: i64,
+    component_base: usize,
+    group: u64,
+) -> Vec<Vec<Value>> {
+    let (w0, w1) = item
+        .meta
+        .spans_window
+        .expect("with_spans sets spans_window whenever spans is non-empty, and component_rows runs only then");
+    let window = (w1 - w0).max(0);
+    let sum: u64 = item.meta.spans.iter().map(|&[_, ms]| ms).sum();
+    let scale = if sum > window as u64 && sum > 0 {
+        window as f64 / sum as f64
+    } else {
+        1.0
+    };
+    let meta = component_meta(item.meta.id, group);
+    let base_off = w0 - start_abs;
+    let mut cumulative: u64 = 0;
+    let mut prev_off: i64 = 0;
+    item.meta
+        .spans
+        .iter()
+        .map(|&[slot, ms]| {
+            cumulative += ms;
+            let end_off = (cumulative as f64 * scale).round() as i64;
+            let row = vec![
+                Value::from((component_base + slot as usize) as i64),
+                Value::from(base_off + prev_off),
+                Value::from(end_off - prev_off),
+                meta.clone(),
+            ];
+            prev_off = end_off;
             row
         })
         .collect()
@@ -419,7 +569,7 @@ fn pipeline_rows(items: &[PipelineItem], start_abs: i64) -> Vec<Vec<Value>> {
 
 /// The trailing metadata object of an item, holding the present fields among id, cpu_heavy, and
 /// gpu_heavy, or None when every field is absent.
-fn metadata_object(meta: PipelineItemMeta) -> Option<Value> {
+fn metadata_object(meta: &PipelineItemMeta) -> Option<Value> {
     let mut map = serde_json::Map::new();
     if let Some(id) = meta.id {
         map.insert("id".to_string(), id.into());
@@ -431,6 +581,17 @@ fn metadata_object(meta: PipelineItemMeta) -> Option<Value> {
         map.insert("gpu_heavy".to_string(), index.into());
     }
     (!map.is_empty()).then(|| Value::Object(map))
+}
+
+/// The trailing metadata object of a component row, the parent item's id when present and the
+/// per-node group its sibling components share.
+fn component_meta(id: Option<i64>, group: u64) -> Value {
+    let mut map = serde_json::Map::new();
+    if let Some(id) = id {
+        map.insert("id".to_string(), id.into());
+    }
+    map.insert("group".to_string(), group.into());
+    Value::Object(map)
 }
 
 /// The kept cluster-log lines within a block's proving window, each rebased to a microsecond offset
@@ -792,8 +953,9 @@ mod tests {
             metrics::{MetricBlock, MetricStatus},
         },
         output::assemble::{
-            benchmark_name, block_logs, build_block, match_blocks_to_logs, metric_cell,
-            node_proving_windows, node_stats, pipeline_rows,
+            LogWindowSource, any_log_spans, benchmark_name, block_logs, block_subphase_rows,
+            build_block, match_blocks_to_logs, metric_cell, node_proving_windows, node_stats,
+            pipeline_rows,
         },
     };
 
@@ -1122,8 +1284,11 @@ mod tests {
             &node_ids,
             1,
             at("10").epoch_ms(),
-            &[],
-            &[],
+            &LogWindowSource {
+                raw_log: &[],
+                starts: &[],
+            },
+            0,
         );
         assert_eq!(block.nodes[0].crashed_ms, Some(0));
         assert_eq!(block.nodes[0].crash_kind.as_deref(), Some("crashed"));
@@ -1179,8 +1344,11 @@ mod tests {
             &node_ids,
             1,
             start,
-            &[],
-            &[],
+            &LogWindowSource {
+                raw_log: &[],
+                starts: &[],
+            },
+            0,
         );
         // Each state encodes by arity, the dangling ends carried by truncation.
         assert_eq!(
@@ -1202,7 +1370,7 @@ mod tests {
             item(3, (100, Some(120)), None),
             item(0, (50, Some(90)), None),
         ];
-        let rows = pipeline_rows(&items, 0);
+        let rows = pipeline_rows(&items, 0, 6);
         assert_eq!(
             serde_json::to_value(&rows).unwrap(),
             json!([[0, 50, 40], [3, 100, 20], [5, 100, 50]])
@@ -1226,12 +1394,13 @@ mod tests {
                     id: Some(3),
                     cpu_heavy: Some(0),
                     gpu_heavy: Some(1),
+                    ..Default::default()
                 },
                 ..item(1, (400, Some(600)), Some((700, Some(900))))
             },
             item(2, (1000, Some(1100)), None),
         ];
-        let rows = pipeline_rows(&items, 0);
+        let rows = pipeline_rows(&items, 0, 6);
         assert_eq!(
             serde_json::to_value(&rows).unwrap(),
             json!([
@@ -1240,6 +1409,101 @@ mod tests {
                 [2, 1000, 100],
             ])
         );
+    }
+
+    #[test]
+    fn pipeline_rows_emit_the_sub_step_components_in_place_of_the_item() {
+        // A segment item and an internal item each carry a STARK sub-step breakdown, so each emits
+        // one component row per sub-step in place of its own row, the component kind the base plus
+        // the sub-step slot, packed contiguously across the item's spans window from its start. The
+        // segment breakdown fits with a trailing gap, while the internal's merged window is
+        // narrower than its sum so its components scale to fill it. Each component carries
+        // the parent group, and the segment components its id.
+        let items = vec![
+            PipelineItem {
+                meta: PipelineItemMeta {
+                    id: Some(4),
+                    spans: vec![[0, 5], [1, 620], [2, 240]],
+                    spans_window: Some((100, 1000)),
+                    ..Default::default()
+                },
+                ..item(2, (100, Some(1000)), None)
+            },
+            PipelineItem {
+                meta: PipelineItemMeta {
+                    spans: vec![[7, 10], [8, 300]],
+                    spans_window: Some((2000, 2100)),
+                    ..Default::default()
+                },
+                ..item(4, (2000, Some(2050)), None)
+            },
+        ];
+        let rows = pipeline_rows(&items, 0, 6);
+        assert_eq!(
+            serde_json::to_value(&rows).unwrap(),
+            json!([
+                [6, 100, 5, { "id": 4, "group": 0 }],
+                [7, 105, 620, { "id": 4, "group": 0 }],
+                [8, 725, 240, { "id": 4, "group": 0 }],
+                [13, 2000, 3, { "group": 1 }],
+                [14, 2003, 97, { "group": 1 }],
+            ])
+        );
+        // The scaled internal components fill their 100ms window exactly and never overrun it.
+        assert_eq!((2003 - 2000) + 97, 100);
+    }
+
+    #[test]
+    fn block_subphase_rows_sum_the_item_spans_by_slot() {
+        // The block breakdown sums each template slot across every item that carries it, the app
+        // segment items filling the segment slots and the leaf and internal items the recursion
+        // slots, so a slot present on two items reads their sum and an absent slot yields no row.
+        let mut log = Log::new("job");
+        log.nodes = vec![
+            LogNode {
+                id: "node1".to_string(),
+                phases: Vec::new(),
+                items: vec![
+                    PipelineItem {
+                        meta: PipelineItemMeta {
+                            spans: vec![[0, 100], [1, 620]],
+                            ..Default::default()
+                        },
+                        ..item(2, (0, Some(1)), None)
+                    },
+                    PipelineItem {
+                        meta: PipelineItemMeta {
+                            spans: vec![[8, 350]],
+                            ..Default::default()
+                        },
+                        ..item(4, (0, Some(1)), None)
+                    },
+                ],
+                end: None,
+            },
+            LogNode {
+                id: "node2".to_string(),
+                phases: Vec::new(),
+                items: vec![PipelineItem {
+                    meta: PipelineItemMeta {
+                        spans: vec![[1, 380], [8, 116]],
+                        ..Default::default()
+                    },
+                    ..item(2, (0, Some(1)), None)
+                }],
+                end: None,
+            },
+        ];
+        assert_eq!(
+            block_subphase_rows(&log),
+            vec![[0, 100], [1, 1000], [8, 466]]
+        );
+        assert!(any_log_spans(std::slice::from_ref(&log)));
+
+        // A log whose items carry no spans yields no rows and does not trigger the template.
+        let bare = Log::new("bare");
+        assert!(block_subphase_rows(&bare).is_empty());
+        assert!(!any_log_spans(std::slice::from_ref(&bare)));
     }
 
     #[test]
@@ -1262,8 +1526,11 @@ mod tests {
             &node_ids,
             1,
             at("10").epoch_ms(),
-            &[],
-            &[],
+            &LogWindowSource {
+                raw_log: &[],
+                starts: &[],
+            },
+            0,
         );
         let json = serde_json::to_string(&block).unwrap();
         assert!(

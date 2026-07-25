@@ -38,6 +38,14 @@ export interface PipelineStep {
   paired: boolean;
 }
 
+// One sub-phase of the segment or recursion breakdown, a STARK proving sub-step. `phase` is the
+// owning coarse phase name that colors it, and `name` the sub-step's stable key.
+export interface SubPhase {
+  name: string;
+  label: string;
+  phase: string;
+}
+
 // The zkVM that produced the proofs, carrying its ordered phase preset.
 export interface Zkvm {
   name: string;
@@ -46,6 +54,9 @@ export interface Zkvm {
   // Fine-pipeline kind template in wire order, indexed by BlockNode.pipeline rows. Absent on a
   // document generated before the pipeline was captured.
   pipeline?: PipelineStep[];
+  // Sub-phase breakdown template in wire order, indexed by Block.subphases rows. Absent on a
+  // document whose run's logs carried no per-item spans.
+  subphases?: SubPhase[];
 }
 
 // The guest program that was proven.
@@ -99,11 +110,13 @@ export interface PhaseWindow {
 }
 
 // Optional per-item metadata carried as a pipeline row's trailing object. `id` numbers the item within
-// its kind, and cpu_heavy and gpu_heavy name the segment index of each side of a paired item.
+// its kind, cpu_heavy and gpu_heavy name the segment index of each side of a paired item, and group is
+// the per-node group the STARK sub-step components of one parent proof share so they pack onto one row.
 export interface PipelineRowMeta {
   id?: number;
   cpu_heavy?: number;
   gpu_heavy?: number;
+  group?: number;
 }
 
 // One node's contribution to a block, positioned to match Hardware.nodes. `phases[i]` aligns to
@@ -158,6 +171,10 @@ export interface Block {
   verification_time_ms: number | null;
   meta: BlockMeta;
   nodes: BlockNode[];
+  // Segment and recursion sub-phase sums as compact [index, ms] rows referencing Zkvm.subphases,
+  // summed across the block's segments and recursion proofs. Absent when the block's proofs carried
+  // no per-item spans.
+  subphases?: [number, number][];
 }
 
 // Display metadata for one telemetry metric.

@@ -78,6 +78,8 @@ impl ZkvmParser for ZiskParser {
             name: "zisk",
             phases: zisk_phases(),
             pipeline: pipeline::zisk_pipeline(),
+            pipeline_components: Vec::new(),
+            subphases: Vec::new(),
             logs,
         })
     }

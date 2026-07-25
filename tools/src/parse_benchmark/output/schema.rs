@@ -57,6 +57,12 @@ pub struct Zkvm {
     /// round-trip unchanged.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pipeline: Vec<PipelineStep>,
+    /// The ordered sub-phase breakdown template, the STARK sub-steps within the segment and
+    /// recursion phases, referenced positionally by each block's sub-phase rows. Empty when the
+    /// run's logs carried no per-item spans, and omitted from the wire so documents without
+    /// one round-trip unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subphases: Vec<SubPhase>,
 }
 
 /// The guest program that was proven.
@@ -64,6 +70,15 @@ pub struct Zkvm {
 pub struct Guest {
     pub name: String,
     pub version: String,
+}
+
+/// One sub-phase of the segment or recursion breakdown, a STARK proving sub-step. `phase` is the
+/// owning coarse phase name, the row's color source, and `name` the sub-step's stable key.
+#[derive(Serialize, Deserialize, PartialEq)]
+pub struct SubPhase {
+    pub name: String,
+    pub label: String,
+    pub phase: String,
 }
 
 /// One phase of the proving pipeline, rendered in array order and colored by position.
@@ -180,6 +195,11 @@ pub struct Block {
     /// zkVM-specific per-block scalars keyed by field name, such as input_size and steps for zisk.
     pub meta: BTreeMap<String, Value>,
     pub nodes: Vec<BlockNode>,
+    /// The segment and recursion sub-phase sums as compact [index, ms] rows referencing
+    /// Zkvm.subphases, summed across the block's segments and recursion proofs. Absent when the
+    /// run's logs carried no per-item spans or none joined this block.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subphases: Vec<[u64; 2]>,
     /// The coordinator and worker log lines within this block's proving window, in time order,
     /// every level including DEBUG and TRACE. Skipped from benchmark.json and written to a sibling
     /// per-block log file instead.
@@ -227,7 +247,7 @@ pub struct Telemetry {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_benchmark::output::schema::{BlockNode, Phase, Zkvm};
+    use crate::parse_benchmark::output::schema::{Block, BlockNode, Phase, Zkvm};
 
     #[test]
     fn a_phase_serializes_overlap_only_when_true() {
@@ -256,6 +276,31 @@ mod tests {
     }
 
     #[test]
+    fn a_zkvm_without_a_subphase_template_round_trips_unchanged() {
+        // A document generated before the sub-phase breakdown was captured carries no subphases
+        // key, so it round-trips byte-for-byte.
+        let wire = r#"{"name":"openvm","version":"v1","phases":[]}"#;
+        let zkvm: Zkvm = serde_json::from_str(wire).unwrap();
+        assert!(zkvm.subphases.is_empty());
+        assert_eq!(serde_json::to_string(&zkvm).unwrap(), wire);
+    }
+
+    #[test]
+    fn a_block_carries_its_subphase_rows_as_compact_index_ms_pairs() {
+        // The sub-phase sums serialize as [index, ms] rows referencing the template, and a block
+        // without any omits the key.
+        let with_rows = r#"{"name":"b","status":"success","start_ms":0,"gas_used":null,"proving_ms":null,"proof_size":null,"verification_time_ms":null,"meta":{},"nodes":[],"subphases":[[0,260],[8,2082]]}"#;
+        let block: Block = serde_json::from_str(with_rows).unwrap();
+        assert_eq!(block.subphases, vec![[0, 260], [8, 2082]]);
+        assert_eq!(serde_json::to_string(&block).unwrap(), with_rows);
+
+        let without = r#"{"name":"b","status":"success","start_ms":0,"gas_used":null,"proving_ms":null,"proof_size":null,"verification_time_ms":null,"meta":{},"nodes":[]}"#;
+        let bare: Block = serde_json::from_str(without).unwrap();
+        assert!(bare.subphases.is_empty());
+        assert_eq!(serde_json::to_string(&bare).unwrap(), without);
+    }
+
+    #[test]
     fn a_node_without_pipeline_rows_round_trips_unchanged() {
         let wire = r#"{"phases":[null],"crashed_ms":null,"crash_kind":null,"participated":true}"#;
         let node: BlockNode = serde_json::from_str(wire).unwrap();
@@ -265,8 +310,9 @@ mod tests {
 
     #[test]
     fn a_pipeline_row_round_trips_its_trailing_metadata_object() {
-        // A metadata-free row stays pure integers while a trailing object rides its row untouched.
-        let wire = r#"{"phases":[null],"pipeline":[[0,306,1538],[0,412,1490,{"id":12,"cpu_heavy":0,"gpu_heavy":1}]],"crashed_ms":null,"crash_kind":null,"participated":true}"#;
+        // A metadata-free row stays pure integers while a trailing object rides its row untouched,
+        // whether it carries the id and heavy markers or a sub-step component's id and group.
+        let wire = r#"{"phases":[null],"pipeline":[[0,306,1538],[0,412,1490,{"id":12,"cpu_heavy":0,"gpu_heavy":1}],[6,500,5,{"id":16,"group":0}]],"crashed_ms":null,"crash_kind":null,"participated":true}"#;
         let node: BlockNode = serde_json::from_str(wire).unwrap();
         assert_eq!(serde_json::to_string(&node).unwrap(), wire);
     }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { fixture } from '@/test/fixture';
 import { openvmBenchmark, openvmBlock, openvmNode, win } from '@/test/openvmFixture';
 import { buildPhaseRegistry } from '@/utils/phases';
-import { apportionPercents, hasOverlapPhases, meanWindowPhases, placedSegmentPieces, splitOverlap, traceLabelBaseSec } from '@/utils/phaseTimings';
+import { apportionPercents, expandSubPhases, hasOverlapPhases, meanWindowPhases, placedSegmentPieces, splitOverlap, subPhaseSums, traceLabelBaseSec } from '@/utils/phaseTimings';
 import type { PhaseMean, Span } from '@/utils/phaseTimings';
 import type { Block } from '@/types/benchmark';
 
@@ -313,6 +313,70 @@ describe('overview phase breakdown pieces', () => {
       'Wrap',
       'Rest',
     ]);
+  });
+});
+
+describe('subPhaseSums', () => {
+  it('sums sub-phase ms across a block population by template index', () => {
+    const registry = buildPhaseRegistry(openvmBenchmark([overlappingBlock], true));
+    const b1: Block = { ...overlappingBlock, subphases: [[1, 600], [8, 120]] };
+    const b2: Block = { ...overlappingBlock, name: 'b1', subphases: [[1, 400], [13, 30]] };
+    const sums = subPhaseSums([b1, b2], registry);
+    // Slot 1 is segment trace_gen, summed across both blocks, and slots 8 and 13 recursion spans.
+    expect(sums[1]).toBe(1000);
+    expect(sums[8]).toBe(120);
+    expect(sums[13]).toBe(30);
+    expect(sums[0]).toBe(0);
+  });
+
+  it('ignores a failed block so its sub-phase rows do not skew the split', () => {
+    const registry = buildPhaseRegistry(openvmBenchmark([overlappingBlock], true));
+    const ok: Block = { ...overlappingBlock, subphases: [[1, 600]] };
+    const failed: Block = { ...overlappingBlock, name: 'b1', status: 'crashed', subphases: [[1, 9000]] };
+    // Only the successful block's rows count, matching the mean bar's success-only population.
+    expect(subPhaseSums([ok, failed], registry)[1]).toBe(600);
+  });
+});
+
+describe('expandSubPhases', () => {
+  const regSub = (blocks: Block[]) => buildPhaseRegistry(openvmBenchmark(blocks, true));
+
+  it('returns the mean unchanged when the run carries no sub-phase template', () => {
+    const registry = registryOf([overlappingBlock]);
+    const mean = meanWindowPhases([overlappingBlock], registry);
+    expect(expandSubPhases(mean, [overlappingBlock], registry)).toBe(mean);
+  });
+
+  it('splits the segment bar into tinted sub-bars filling its span proportionally', () => {
+    // Segment sums trace_gen 600, main_trace_commit 240, openings 130, total 970.
+    const block: Block = { ...overlappingBlock, subphases: [[1, 600], [2, 240], [6, 130]] };
+    const registry = regSub([block]);
+    const mean = meanWindowPhases([block], registry);
+    const segment = mean.phases.find(p => p.key === 'segment')!;
+    const out = expandSubPhases(mean, [block], registry);
+    // The segment phase is replaced by its seven sub-bars, keyed by owner and name.
+    expect(out.phases.some(p => p.key === 'segment')).toBe(false);
+    const subs = out.phases.filter(p => p.key.startsWith('segment::'));
+    expect(subs).toHaveLength(7);
+    // The sub-bars tile the parent placement span from its start without gap or overhang.
+    expect(subs[0]!.placed!.start).toBeCloseTo(segment.placed!.start);
+    const width = subs.reduce((sum, p) => sum + p.placed!.width, 0);
+    expect(width).toBeCloseTo(segment.placed!.width);
+    // trace_gen takes 600/970 of the width, the four unlisted sub-steps zero.
+    const traceGen = subs.find(p => p.key === 'segment::trace_gen')!;
+    expect(traceGen.placed!.width).toBeCloseTo((segment.placed!.width * 600) / 970);
+    expect(subs.find(p => p.key === 'segment::execute_preflight')!.placed!.width).toBeCloseTo(0);
+    // The sub-fractions sum to the parent phase fraction, so the row still closes at one.
+    expect(subs.reduce((sum, p) => sum + p.placed!.frac, 0)).toBeCloseTo(segment.placed!.frac);
+  });
+
+  it('divides a phase without population data equally so the bar stays filled', () => {
+    const block: Block = { ...overlappingBlock, subphases: [] };
+    const registry = regSub([block]);
+    const mean = meanWindowPhases([block], registry);
+    const segment = mean.phases.find(p => p.key === 'segment')!;
+    const subs = expandSubPhases(mean, [block], registry).phases.filter(p => p.key.startsWith('segment::'));
+    expect(subs.every(p => Math.abs(p.placed!.width - segment.placed!.width / 7) < 1e-9)).toBe(true);
   });
 });
 

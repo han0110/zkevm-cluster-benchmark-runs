@@ -16,7 +16,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parse_benchmark::input::log::{
-    Log, LogNode, PipelineDef, PipelineItem, PipelineItemMeta,
+    Log, LogNode, PipelineDef, PipelineItem, PipelineItemMeta, SubPhaseDef,
     zkvm::openvm::{
         coordinator::RawJob,
         worker::{JobAnnouncements, JobItems, JobSends, JobWrites},
@@ -104,6 +104,115 @@ pub fn openvm_pipeline() -> Vec<PipelineDef> {
         .collect()
 }
 
+/// One STARK proving sub-step, its wire name, display label, and the drained-span key it appears
+/// under, suffixed _time_ms, on a worker completion line.
+struct SubStep {
+    name: &'static str,
+    label: &'static str,
+    span_key: &'static str,
+}
+
+/// The seven sub-steps, in template and execution order. The durations partition each item's STARK
+/// time up to residuals, so the same set breaks down both the segment and the recursion phase.
+const SUB_STEPS: [SubStep; 7] = [
+    SubStep {
+        name: "execute_preflight",
+        label: "Execute Preflight",
+        span_key: "execute_preflight_time_ms",
+    },
+    SubStep {
+        name: "trace_gen",
+        label: "Trace Gen",
+        span_key: "trace_gen_time_ms",
+    },
+    SubStep {
+        name: "main_trace_commit",
+        label: "Commit",
+        span_key: "prover.main_trace_commit_time_ms",
+    },
+    SubStep {
+        name: "logup_gkr",
+        label: "LogUp GKR",
+        span_key: "prover.rap_constraints.logup_gkr_time_ms",
+    },
+    SubStep {
+        name: "round0",
+        label: "Sumcheck Univariate Skip",
+        span_key: "prover.rap_constraints.round0_time_ms",
+    },
+    SubStep {
+        name: "mle_rounds",
+        label: "Sumcheck Multilinear Rounds",
+        span_key: "prover.rap_constraints.mle_rounds_time_ms",
+    },
+    SubStep {
+        name: "openings",
+        label: "Open",
+        span_key: "prover.openings_time_ms",
+    },
+];
+
+/// The coarse phases the sub-steps break down, one owner per stage. The app segments own the
+/// segment phase, and the leaf and internal proofs own the recursion phase.
+const OWNERS: [&str; 2] = ["segment", "recursion"];
+
+/// The owner index of the segment breakdown, filled by each app segment item.
+pub(crate) const SEGMENT_OWNER: usize = 0;
+
+/// The owner index of the recursion breakdown, filled by each leaf and internal item, an internal
+/// final proof carrying the merged wrap timings.
+pub(crate) const RECURSION_OWNER: usize = 1;
+
+/// Returns the sub-phase template in wire order, the seven sub-steps under the segment owner then
+/// the seven under the recursion owner, referenced positionally by each item's spans and each
+/// block's sub-phase rows.
+pub fn subphase_template() -> Vec<SubPhaseDef> {
+    OWNERS
+        .iter()
+        .flat_map(|owner| {
+            SUB_STEPS.iter().map(move |step| SubPhaseDef {
+                name: step.name.to_string(),
+                label: step.label.to_string(),
+                phase: owner.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// Returns the openvm component pipeline template, the seven STARK sub-steps under the segment
+/// owner then under the recursion owner, mirroring the sub-phase template. A new-format run appends
+/// these to the base template so each sub-step is a first-class pipeline kind the wire rows
+/// reference in place of the monolithic segment, leaf, and internal items, its name and owner phase
+/// matching a sub-phase so the frontend tints it by that sub-phase rather than the flat phase
+/// color.
+pub fn openvm_component_pipeline() -> Vec<PipelineDef> {
+    OWNERS
+        .iter()
+        .flat_map(|owner| {
+            SUB_STEPS.iter().map(move |step| PipelineDef {
+                name: step.name.to_string(),
+                label: step.label.to_string(),
+                phase: owner.to_string(),
+                paired: false,
+            })
+        })
+        .collect()
+}
+
+/// Resolves a drained-span map into the sub-phase template slots of one owner, matching each of the
+/// seven sub-step keys and dropping every other key, in template order so the pairs stay sorted by
+/// slot. The slot is the owner times the sub-step count plus the step index.
+pub(crate) fn owner_span_rows(map: &BTreeMap<&str, u64>, owner: usize) -> Vec<[u64; 2]> {
+    SUB_STEPS
+        .iter()
+        .enumerate()
+        .filter_map(|(step, s)| {
+            map.get(s.span_key)
+                .map(|&ms| [(owner * SUB_STEPS.len() + step) as u64, ms])
+        })
+        .collect()
+}
+
 /// Builds the generic log for one parsed openvm job.
 pub fn build_log(
     raw: &RawJob,
@@ -159,7 +268,8 @@ fn build_nodes(
                 .and_then(|m| m.get(id))
                 .into_iter()
                 .flatten()
-                .map(|item| leaf_index(*item, raw.leaf_arity))
+                .cloned()
+                .map(|item| leaf_index(item, raw.leaf_arity))
                 .collect();
             let mut phases = vec![None; PHASE_COUNT];
             // Input transfer runs from the manager's fan-out start to the node's last
@@ -463,5 +573,42 @@ mod tests {
         let log = build_log(&raw_job(), None, None, None, None);
         assert!(log.nodes.is_empty() && log.participants.is_empty());
         assert_eq!(log.status, LogStatus::Success);
+    }
+
+    #[test]
+    fn the_sub_step_spans_do_not_shift_the_phase_envelopes() {
+        // The segment and recursion envelopes read the monolithic item windows, so an item's STARK
+        // sub-step spans, which the wire emits as component rows in place of the item, never move
+        // its phase window. A new-format node keeps the identical phase envelopes of the same node
+        // without spans.
+        let phases_of = |items: JobItems| {
+            let by_job = BTreeMap::from([(raw_job().id.clone(), items)]);
+            build_log(&raw_job(), by_job.get(&raw_job().id), None, None, None).nodes[0]
+                .phases
+                .clone()
+        };
+        let plain: JobItems = BTreeMap::from([(
+            "node1".to_string(),
+            vec![
+                span(APP_SEGMENT, 1_002_000, 1_003_000),
+                span(LEAF, 1_003_000, 1_003_500),
+            ],
+        )]);
+        let spanned = |kind: usize, start: i64, end: i64, spans: Vec<[u64; 2]>| PipelineItem {
+            meta: PipelineItemMeta {
+                spans,
+                spans_window: Some((start, end)),
+                ..Default::default()
+            },
+            ..span(kind, start, end)
+        };
+        let with_spans: JobItems = BTreeMap::from([(
+            "node1".to_string(),
+            vec![
+                spanned(APP_SEGMENT, 1_002_000, 1_003_000, vec![[0, 400], [1, 500]]),
+                spanned(LEAF, 1_003_000, 1_003_500, vec![[7, 200]]),
+            ],
+        )]);
+        assert_eq!(phases_of(plain), phases_of(with_spans));
     }
 }
