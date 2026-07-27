@@ -79,8 +79,8 @@ const validRow = (row: number[]): boolean =>
 export function decodePipeline(bench: Benchmark, block: Block, nodes: string[], registry: PhaseRegistry): PipelineModel {
   const kinds = bench.software.zkvm.pipeline ?? [];
   // A component kind names a STARK sub-step under its owner phase, so it colors by that sub-phase
-  // tint rather than the flat owner color, distinguishing the seven components and matching the
-  // block-level split chart. Every other kind colors by its phase.
+  // tint rather than the flat owner color, distinguishing the seven components. Every other kind
+  // colors by its phase.
   const subKeys = new Set(registry.subphases.map(sub => sub.key));
   const kindColor = (phase: string, name: string): string => {
     const subKey = subPhaseKey(phase, name);

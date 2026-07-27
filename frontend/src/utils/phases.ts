@@ -61,7 +61,7 @@ export interface SubPhaseEntry {
   label: string;
   // Owning coarse phase name, the tint source.
   phase: string;
-  // Position in the template, matching a block's sub-phase row index.
+  // Position in the wire template.
   index: number;
   // Composite `${phase}::${name}`, the registry color lookup key unique across the two owners.
   key: string;

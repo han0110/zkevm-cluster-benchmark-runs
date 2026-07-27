@@ -431,8 +431,8 @@ describe('decodePipeline sub-step components', () => {
     expect(preflight.label).toBe('execute_preflight');
     expect(preflight.phase).toBe('segment');
     expect([preflight.id, preflight.group]).toEqual([4, 0]);
-    // The component colors by its sub-phase tint, the same the block-level split chart uses, not the
-    // flat owner color the monolithic segment bar would take.
+    // The component colors by its sub-phase tint, not the flat owner color the monolithic segment
+    // bar would take.
     expect(preflight.color).toBe(componentRegistry.color(subPhaseKey('segment', 'execute_preflight')));
     expect(preflight.color).not.toBe(componentRegistry.color('segment'));
     // A base kind keeps its flat phase color and carries no group.
