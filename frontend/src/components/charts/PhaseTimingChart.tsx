@@ -1,7 +1,8 @@
 /*
  * Phase-timing line chart across blocks, one line per phase, legible at the 500-1000 block scale where
- * stacked bars crush into slivers. With a controlled zoom window it reports wheel and drag back so a
- * sibling stays in step, otherwise it zooms self-contained.
+ * stacked bars crush into slivers. A preset whose phases overlap draws the total alone, since a line per
+ * phase would read as a sequence the concurrent phases never form. With a controlled zoom window it
+ * reports wheel and drag back so a sibling stays in step, otherwise it zooms self-contained.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,6 +26,9 @@ interface PhaseTimingChartProps {
   registry: PhaseRegistry;
   // Optional per-block total proof time, drawn as the leading solid envelope line.
   total?: number[];
+  // Draws the total alone, dropping the per-phase lines and the legend that selects them. Set for a
+  // preset whose phases overlap, where a per-phase line misreports concurrency as sequence.
+  totalOnly?: boolean;
   height?: number;
   // Zoom window in percent, read on rebuild so it survives a legend toggle without being an option dep
   // (which would rebuild per wheel tick). Live wheel/drag report through onZoom and apply to the
@@ -43,6 +47,7 @@ export function PhaseTimingChart({
   values,
   registry,
   total,
+  totalOnly = false,
   height = 320,
   getZoom,
   onZoom,
@@ -52,12 +57,16 @@ export function PhaseTimingChart({
 }: PhaseTimingChartProps) {
   const theme = useThemeColors();
 
+  // The phases drawn as their own line, none of them in total-only mode. Every per-phase concern below
+  // reads this rather than the registry, so one branch decides the whole shape of the chart.
+  const phases = useMemo(() => (totalOnly ? [] : registry.list), [totalOnly, registry]);
+
   // Legend identities keyed by series name so the selection set drives visibility. Total leads with a
-  // solid swatch matching its envelope line, then one dot per registry phase.
+  // solid swatch matching its envelope line, then one dot per drawn phase.
   const items = useMemo(() => {
-    const phases = registry.list.map(p => ({ key: p.label, label: p.label, color: p.color }));
-    return total ? [{ key: 'Total', label: 'Total', color: theme.muted }, ...phases] : phases;
-  }, [registry, total, theme]);
+    const phaseItems = phases.map(p => ({ key: p.label, label: p.label, color: p.color }));
+    return total ? [{ key: 'Total', label: 'Total', color: theme.muted }, ...phaseItems] : phaseItems;
+  }, [phases, total, theme]);
 
   const allKeys = useMemo(() => items.map(i => i.key), [items]);
   // Grafana-style isolation. Opens with every series enabled and resets to all when the series set
@@ -69,10 +78,10 @@ export function PhaseTimingChart({
   // Y-axis ceiling fixed over every series including the total envelope and the reference thresholds, so
   // isolating one phase never rescales the axis and both threshold lines stay in view.
   const yMax = useMemo(() => {
-    const all = [...(total ?? []), ...registry.list.flatMap(p => values[p.name] ?? []), ...THRESHOLDS_S];
+    const all = [...(total ?? []), ...phases.flatMap(p => values[p.name] ?? []), ...THRESHOLDS_S];
     const peak = all.reduce((m, v) => (v != null && v > m ? v : m), 0);
     return peak > 0 ? Math.ceil(peak * 1.05) : 1;
-  }, [values, registry, total]);
+  }, [values, phases, total]);
 
   const option = useMemo<EChartsCoreOption>(() => {
     // Symbols off so a thousand-block run reads as clean trends, lttb sampling keeps the path light while
@@ -87,11 +96,11 @@ export function PhaseTimingChart({
       emphasis: { focus: 'series' as const },
       data: data ?? [],
     });
-    // Total leads as a solid envelope, then one line per registry phase. Only selected series are
+    // Total leads as a solid envelope, then one line per drawn phase. Only selected series are
     // emitted so isolating a phase hides the rest without disturbing the fixed axes.
     const series = [
       ...(total ? [line('Total', theme.muted, total)] : []),
-      ...registry.list.map(phase => line(phase.label, phase.color, values[phase.name])),
+      ...phases.map(phase => line(phase.label, phase.color, values[phase.name])),
     ].filter(s => selected.has(s.name));
 
     // Dashed reference thresholds on a silent series so they always show regardless of the selection
@@ -132,7 +141,7 @@ export function PhaseTimingChart({
     };
     // getZoom is read for the window but kept out of the deps on purpose so a wheel does not rebuild the
     // option, the window is only re-read when the series or axis change.
-  }, [labels, values, registry, total, theme, selected, yMax, getZoom, minValueSpan]);
+  }, [labels, values, phases, total, theme, selected, yMax, getZoom, minValueSpan]);
 
   // Smallest zoom window as a percentage so the wheel guard knows when the chart is at its floor and
   // cannot zoom in further.
@@ -196,9 +205,10 @@ export function PhaseTimingChart({
     [items, selected, allKeys]
   );
 
+  // A lone series has nothing to select between, so the legend appears only once there are at least two.
   return (
     <div className="flex flex-col gap-2">
-      <GroupedLegend groups={legendGroups} orientation="horizontal" />
+      {items.length > 1 && <GroupedLegend groups={legendGroups} orientation="horizontal" />}
       <EChart option={option} height={height} onReady={handleReady} />
     </div>
   );

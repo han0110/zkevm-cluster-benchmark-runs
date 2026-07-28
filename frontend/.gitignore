@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.log
 .playwright-cli/
+# Uncompressed benchmark documents, kept for debugging. The frontend loads the .json.zstd beside them.
+data/*.json

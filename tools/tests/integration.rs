@@ -17,7 +17,7 @@ use tools::parse_benchmark::{
         Sources,
         log::{
             LogStatus,
-            zkvm::{detect_backend, openvm, zisk::coordinator},
+            zkvm::{detect_backend, openvm, zisk, zisk::coordinator},
         },
     },
     parse_to_benchmark,
@@ -130,15 +130,9 @@ fn assembles_lean_benchmark_document() {
     assert_eq!(b.software.zkvm.phases[0].name, "input");
     assert_eq!(b.software.zkvm.phases[0].label, "Input Transfer");
     assert_eq!(b.software.zkvm.phases[3].label, "Prove + Recurse");
-    // The fine-pipeline template names the thirteen zisk kinds, whose indices the per-node
-    // pipeline rows reference. The wc kind appears once per side of the prove boundary.
-    assert_eq!(b.software.zkvm.pipeline.len(), 13);
-    assert_eq!(b.software.zkvm.pipeline[2].name, "wc_contribution");
-    assert_eq!(b.software.zkvm.pipeline[2].phase, "commit");
-    assert!(b.software.zkvm.pipeline[2].paired);
-    assert_eq!(b.software.zkvm.pipeline[7].name, "wc_proof");
-    assert_eq!(b.software.zkvm.pipeline[7].phase, "prove");
-    assert!(b.software.zkvm.pipeline[7].paired);
+    // The fine pipeline is withheld while its marker semantics are settled, so a zisk document
+    // declares no kind template and the key never reaches the wire.
+    assert!(b.software.zkvm.pipeline.is_empty());
     // A fresh parse yields one run, and the fixture basename carries no timestamp so the benchmark
     // id and the run id are both the bare basename.
     assert_eq!(b.id, "fixture");
@@ -304,71 +298,48 @@ fn first_block_matches_known_values() {
     );
 }
 
+/// The zisk fine pipeline is withheld from the document while its marker semantics are settled, yet
+/// the extraction still runs over every worker log, so the parser stays exercised against real log
+/// shapes rather than the unit tests' snippets alone.
 #[test]
-fn blocks_carry_pipeline_items() {
+fn zisk_withholds_the_fine_pipeline_it_still_extracts() {
     let dir = fixture_dir();
     let b = parse_to_benchmark(&dir).unwrap();
-    let kind_count = b.software.zkvm.pipeline.len() as i64;
-    let mut cached_proof_rows = 0;
-    let mut full_contribution_rows = 0;
-    let mut lone_contribution_rows = 0;
-    for block in &b.runs[0].blocks {
-        for (ni, node) in block.nodes.iter().enumerate() {
-            // Every node works dozens of brackets per block, so a thin count means lost items.
+    assert!(
+        b.software.zkvm.pipeline.is_empty(),
+        "the kind template is withheld"
+    );
+    assert!(
+        b.runs[0]
+            .blocks
+            .iter()
+            .all(|bl| bl.nodes.iter().all(|n| n.pipeline.is_empty())),
+        "no block carries a wire row, which would address a kind the template does not declare"
+    );
+
+    // The worker load still extracts items for every proof, the real-log coverage the withheld
+    // emission would otherwise cost, and every kind stays inside the template the parser declares.
+    let worker = zisk::worker::load(&dir.join("logs")).unwrap();
+    let kinds = zisk::pipeline::zisk_pipeline().len();
+    assert_eq!(
+        kinds, 13,
+        "the template still names the thirteen zisk kinds"
+    );
+    assert_eq!(worker.pipelines.len(), EXPECTED_PROOFS);
+    for (job, per_node) in &worker.pipelines {
+        for (node, items) in per_node {
+            // Every node works dozens of brackets per proof, so a thin count means lost items.
             assert!(
-                node.pipeline.len() >= 10,
-                "block {} node {ni} carries only {} pipeline rows",
-                block.name,
-                node.pipeline.len()
+                items.len() >= 10,
+                "job {job} node {node} carries only {} items",
+                items.len()
             );
-            let aggregator = node.phases[4].is_some();
-            let rows: Vec<Vec<i64>> = node.pipeline.iter().map(|r| row_cells(r)).collect();
-            for row in &rows {
-                assert!(
-                    (0..kind_count).contains(&row[0]),
-                    "kind {} out of template range",
-                    row[0]
-                );
-                // The clean fixture leaves nothing dangling, so every row is a complete segment
-                // or a complete pair.
-                assert!(
-                    row.len() == 3 || row.len() == 5,
-                    "unexpected arity in block {} node {ni}: {row:?}",
-                    block.name
-                );
-                // The vadcop kinds run only on the node that aggregated the block.
-                assert!(
-                    !(row[0] == 11 || row[0] == 12) || aggregator,
-                    "vadcop row on non-aggregator node {ni} of block {}",
-                    block.name
-                );
-                if row[0] == 7 && row.len() == 3 {
-                    cached_proof_rows += 1;
-                }
-                if row[0] == 2 && row.len() == 5 {
-                    full_contribution_rows += 1;
-                }
-                if row[0] == 2 && row.len() == 3 {
-                    lone_contribution_rows += 1;
-                }
-            }
             assert!(
-                rows.windows(2)
-                    .all(|w| (w[0][1], w[0][0]) <= (w[1][1], w[1][0])),
-                "pipeline rows out of (start, kind) order in block {}",
-                block.name
+                items.iter().all(|i| i.kind < kinds),
+                "job {job} node {node} holds a kind outside the template"
             );
         }
     }
-    // A proof over a cached witness is a compute-only row, and a generated witness claimed by its
-    // contribution is a full pair. Nearly every contribution pairs its witness, with only the
-    // table airs left compute-only, so the paired rows dominate the lone ones.
-    assert!(cached_proof_rows > 0, "no compute-only wc_proof row");
-    assert!(
-        full_contribution_rows > lone_contribution_rows,
-        "paired wc_contribution rows must outnumber lone ones, \
-         got {full_contribution_rows} paired vs {lone_contribution_rows} lone"
-    );
 }
 
 #[test]
@@ -497,6 +468,55 @@ fn write_refuses_to_overwrite_without_force() {
 
     let doc = parse_benchmark::output::read(&out).unwrap();
     assert_eq!(doc.runs.len(), 1, "a forced overwrite is still one run");
+}
+
+/// A .json.zstd output is written as one zstd frame, reads back as the same document the plain path
+/// yields, keeps its per-block log tree beside it, and still patches.
+#[test]
+fn a_compressed_output_round_trips_and_patches() {
+    // Separate directories, so the log-tree assertion below reads the compressed run's own output
+    // rather than a file the plain run happened to leave at the same path.
+    let plain = tempdir().join("benchmark.json");
+    let dir = tempdir();
+    let framed = dir.join("benchmark.json.zstd");
+
+    parse_benchmark::run(&[fixture_dir()], &plain, false, false).expect("the plain write succeeds");
+    parse_benchmark::run(&[fixture_dir()], &framed, false, false)
+        .expect("the compressed write succeeds");
+
+    let frame = std::fs::read(&framed).unwrap();
+    assert_eq!(
+        frame[..4],
+        [0x28, 0xb5, 0x2f, 0xfd],
+        "the file is a zstd frame"
+    );
+    // The header declares the uncompressed size, in either the frame content size field or the
+    // single segment flag, so a reader allocates the document once instead of growing it per block.
+    assert!(
+        frame[4] >> 6 != 0 || frame[4] & 0x20 != 0,
+        "the frame header declares its uncompressed size"
+    );
+    assert!(frame.len() < std::fs::metadata(&plain).unwrap().len() as usize);
+
+    // The framing is the only difference, so the decompressed document matches the plain one and
+    // the log tree still resolves from the output's own parent.
+    let from_plain = parse_benchmark::output::read(&plain).unwrap();
+    let from_frame = parse_benchmark::output::read(&framed).unwrap();
+    assert_eq!(
+        parse_benchmark::output::to_json(&from_frame).unwrap(),
+        parse_benchmark::output::to_json(&from_plain).unwrap()
+    );
+    assert!(
+        dir.join("log/fixture/fixture/rpc_block_25192300.tar.json")
+            .exists(),
+        "the per-block log tree lands beside the compressed document"
+    );
+
+    // A patch reads the frame back and rewrites it framed, the path every run after the first takes
+    // when one invocation parses several runs into one document.
+    parse_benchmark::run(&[fixture_dir()], &framed, false, true).expect("the patch appends a run");
+    let patched = parse_benchmark::output::read(&framed).unwrap();
+    assert_eq!(patched.runs.len(), 2);
 }
 
 /// Patching the same fixture twice appends a second run, suffixing the duplicate run id, and keeps

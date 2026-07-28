@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { fixture } from '@/test/fixture';
 import { openvmBenchmark, openvmSubPhases } from '@/test/openvmFixture';
 import { buildPhaseRegistry, subPhaseKey } from '@/utils/phases';
-import { decodePipeline, hasPipeline, packRows, rowPitch, rowWindow } from '@/utils/pipelineItems';
+import { decodePipeline, hasPipeline, packRows, recursionCount, rowPitch, rowWindow } from '@/utils/pipelineItems';
 import type { Benchmark, Block, BlockNode, PipelineRowMeta, PipelineStep } from '@/types/benchmark';
 
 const registry = buildPhaseRegistry(fixture);
@@ -499,5 +499,50 @@ describe('packRows sub-step components', () => {
     // The merged segment row takes the execution start, the leaf run its own.
     expect(rows[0]!.startSec).toBe(0.1);
     expect(rows[1]!.startSec).toBe(2);
+  });
+});
+
+describe('recursionCount', () => {
+  it('counts the distinct per-node groups of a component document', () => {
+    const block = withNodes([
+      node([
+        // Two recursion proofs, each a group of sub-step components, beside a segment proof whose own
+        // group repeats a number from the other phase.
+        [13, 2000, 3, { group: 0 }],
+        [14, 2003, 97, { group: 0 }],
+        [13, 2200, 4, { group: 1 }],
+        [15, 2204, 80, { group: 1 }],
+        [6, 100, 5, { id: 4, group: 0 }],
+        [7, 105, 620, { id: 4, group: 0 }],
+      ]),
+    ]);
+    expect(recursionCount(componentBench, block)).toBe(2);
+  });
+
+  it('keeps one group number on two nodes apart, since a group is per node', () => {
+    const block = withNodes([node([[13, 2000, 3, { group: 0 }]]), node([[13, 2100, 3, { group: 0 }]])]);
+    expect(recursionCount(componentBench, block)).toBe(2);
+  });
+
+  it('counts the monolithic leaf and internal rows of an old-format document one apiece', () => {
+    const block = withNodes([
+      node([
+        [3, 1000, 40, { id: 0 }],
+        [3, 1100, 42, { id: 1 }],
+        [4, 1300, 60],
+        [2, 500, 300, { id: 0 }],
+      ]),
+    ]);
+    expect(recursionCount(componentBench, block)).toBe(3);
+  });
+
+  it('reports no count where the kind template declares no recursion phase', () => {
+    // The zisk preset has no recursion phase, and a document carrying no template at all cannot say.
+    expect(recursionCount(fixture, fixtureBlock('0001'))).toBeNull();
+    expect(recursionCount(withTemplate([]), withNodes([node([[13, 2000, 3, { group: 0 }]])]))).toBeNull();
+  });
+
+  it('counts a block whose nodes ran no recursion proof as zero, not absent', () => {
+    expect(recursionCount(componentBench, withNodes([node([[6, 100, 5, { id: 0, group: 0 }]])]))).toBe(0);
   });
 });

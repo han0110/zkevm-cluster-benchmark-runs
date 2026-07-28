@@ -1,11 +1,11 @@
 /*
- * Benchmark selector as a modal table listing every benchmark with its name, description, time,
- * software, and id. Each row's metadata is read on demand through loadBenchmarkMeta, so opening the
- * picker never loads the full documents. The modal dismisses on the close control, a backdrop press,
+ * Benchmark selector as a modal table listing every benchmark with its time, software, description, and
+ * id, ordered newest first. Each row's metadata is read on demand through loadBenchmarkMeta, so opening
+ * the picker never loads the full documents. The modal dismisses on the close control, a backdrop press,
  * or Escape.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cx } from '@/utils/cx';
 import { FOCUS_RING, OVERLINE, ROW_BASE, ROW_ACTIVE, ROW_IDLE } from '@/utils/styles';
 import { IconChevronDown } from '@/components/common/icons';
@@ -34,6 +34,20 @@ const benchmarkAt = (ms: number | null): string =>
   ms == null
     ? '-'
     : formatDateTime(ms, { year: 'numeric', month: 'short', day: 'numeric' }, { hour: '2-digit', minute: '2-digit' });
+
+// A software part as name@version, the merged cell the table shows and orders on.
+const softwareLabel = (part: { name: string; version: string }): string => `${part.name}@${part.version}`;
+
+// The columns the table orders by. The rest carry no natural order a reader would want.
+type SortKey = 'startedAt' | 'guest' | 'zkvm';
+type SortDir = 'asc' | 'desc';
+
+// The value a row sorts on for the active column, null while its metadata head is still loading.
+function sortValue(meta: BenchmarkMeta | null, key: SortKey): number | string | null {
+  if (!meta) return null;
+  if (key === 'startedAt') return meta.startedAt;
+  return softwareLabel(key === 'guest' ? meta.software.guest : meta.software.zkvm);
+}
 
 // Loads every entry's metadata head once the picker is open, keyed by id. loadBenchmarkMeta caches per
 // url, so reopening resolves from cache without another request.
@@ -68,6 +82,31 @@ export function BenchmarkPicker({ entries, selectedId, selectedName, onSelect }:
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const metas = useBenchmarkMetas(entries, open);
+  // Newest first by default, the order a reader wants when the latest run is the one under review.
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'startedAt', dir: 'desc' });
+
+  // A row whose head has not resolved yet has no value to order on, so it sinks to the bottom in either
+  // direction and settles into place once its metadata arrives.
+  const sorted = useMemo(() => {
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    const valueOf = (id: string): number | string | null => {
+      const state = metas[id];
+      return sortValue(state?.status === 'ready' ? state.meta : null, sort.key);
+    };
+    return [...entries].sort((a, b) => {
+      const av = valueOf(a.id);
+      const bv = valueOf(b.id);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }, [entries, metas, sort]);
+
+  // A new column opens ascending and the active one flips, matching the DataTable headers elsewhere.
+  const toggleSort = (key: SortKey): void =>
+    setSort(prev => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
 
   const choose = (id: string): void => {
     onSelect(id);
@@ -106,16 +145,15 @@ export function BenchmarkPicker({ entries, selectedId, selectedName, onSelect }:
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-surface">
                 <tr className={cx('border-b border-border text-left', OVERLINE)}>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Name</th>
+                  <SortHeader label="Benchmark at" sortKey="startedAt" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Guest" sortKey="guest" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="zkVM" sortKey="zkvm" sort={sort} onSort={toggleSort} />
                   <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Description</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Benchmark at</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">zkVM</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Guest</th>
                   <th className="whitespace-nowrap px-4 py-2.5 font-semibold">ID</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {entries.map(entry => {
+                {sorted.map(entry => {
                   const state = metas[entry.id];
                   const meta = state?.status === 'ready' ? state.meta : null;
                   const failed = state?.status === 'error';
@@ -127,20 +165,17 @@ export function BenchmarkPicker({ entries, selectedId, selectedName, onSelect }:
                       aria-selected={active}
                       className={cx('cursor-pointer', ROW_BASE, active ? ROW_ACTIVE : ROW_IDLE)}
                     >
-                      <td className="whitespace-nowrap px-4 py-2.5 font-medium">
-                        <PickerCell value={meta?.name} failed={failed} />
+                      <td className="whitespace-nowrap px-4 py-2.5 font-medium tabular-nums">
+                        {meta ? benchmarkAt(meta.startedAt) : <PickerCell value={undefined} failed={failed} />}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5">
+                        <PickerCell value={meta && softwareLabel(meta.software.guest)} failed={failed} />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5">
+                        <PickerCell value={meta && softwareLabel(meta.software.zkvm)} failed={failed} />
                       </td>
                       <td className="max-w-md truncate px-4 py-2.5 text-muted" title={meta?.description}>
                         <PickerCell value={meta?.description} failed={failed} muted />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted">
-                        {meta ? benchmarkAt(meta.startedAt) : <PickerCell value={undefined} failed={failed} muted />}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5">
-                        <PickerCell value={meta && `${meta.software.zkvm.name}@${meta.software.zkvm.version}`} failed={failed} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5">
-                        <PickerCell value={meta && `${meta.software.guest.name}@${meta.software.guest.version}`} failed={failed} />
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-faint">{entry.id}</td>
                     </tr>
@@ -153,6 +188,44 @@ export function BenchmarkPicker({ entries, selectedId, selectedName, onSelect }:
         </Modal>
       )}
     </>
+  );
+}
+
+// One sortable column header, its label a button that toggles the order. The indicator is always present
+// and only its glyph toggles, so the header keeps its width when sorted rather than shifting the layout.
+// The markup matches the DataTable headers so the two tables read as one design.
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: SortDir };
+  onSort: (key: SortKey) => void;
+}) {
+  const dir = sort.key === sortKey ? sort.dir : null;
+  return (
+    <th
+      aria-sort={dir ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
+      className="whitespace-nowrap px-4 py-2.5 font-semibold"
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cx(
+          'inline-flex max-w-full items-center gap-1 truncate rounded-sm hover:text-foreground',
+          FOCUS_RING,
+          dir && 'text-foreground'
+        )}
+      >
+        {label}
+        <span aria-hidden="true" className={cx('text-[0.7em]', !dir && 'invisible')}>
+          {dir === 'desc' ? <>&#9660;</> : <>&#9650;</>}
+        </span>
+      </button>
+    </th>
   );
 }
 

@@ -78,7 +78,7 @@ export function BlockDetail({ run, block, onClose }: { run: Run; block: Block; o
         ) : null
       }
     >
-      <StatStrip items={blockOverviewFields().map(f => ({ label: f.label, value: f.render(block, registry) }))} />
+      <StatStrip items={blockOverviewFields(bench).map(f => ({ label: f.label, value: f.render(block, registry) }))} />
 
       <ChartPanel
         title="Trace"

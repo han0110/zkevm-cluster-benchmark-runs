@@ -14,7 +14,7 @@ import { PhaseTimingChart } from '@/components/charts/PhaseTimingChart';
 import { GpuTelemetry } from '@/components/charts/GpuTelemetry';
 import type { ChartInstance } from '@/components/charts/EChart';
 import { useBenchDerived } from '@/hooks/useBenchDerived';
-import { nodePhaseSeries } from '@/utils/phaseTimings';
+import { hasOverlapPhases, nodePhaseSeries } from '@/utils/phaseTimings';
 import { createNodeWindowMap } from '@/utils/nodeWindow';
 import { formatSeconds, formatMiBps, msToSec } from '@/utils/format';
 import type { Block, NodeStats, Run } from '@/types/benchmark';
@@ -39,6 +39,9 @@ export function NodeDetail({ run, node, onClose }: { run: Run; node: string; onC
   const stats = nodeIndex >= 0 ? run.statistics.nodes[nodeIndex] : undefined;
 
   const phase = useMemo(() => nodePhaseSeries(run.blocks, nodeIndex, registry), [run.blocks, nodeIndex, registry]);
+  // An overlap preset's phases run concurrently, so this chart draws the total alone rather than a line
+  // per phase, and then has no per-phase rule to explain.
+  const overlap = hasOverlapPhases(registry);
 
   // A block's wall-clock span in ms. A successful proof reports it directly, a crashed one does not so
   // its span runs to the latest of this node's partial phase ends and its crash moment, keeping the
@@ -170,13 +173,18 @@ export function NodeDetail({ run, node, onClose }: { run: Run; node: string; onC
           toggle, so the two read as one design rather than two near-identical styles. */}
       <ChartPanel
         title="Phase breakdown per block"
-        subtitle="Each phase is this node's own time. Total is the whole proof, which runs longer while the node idles waiting for aggregation."
+        subtitle={
+          overlap
+            ? undefined
+            : "Each phase is this node's own time. Total is the whole proof, which runs longer while the node idles waiting for aggregation."
+        }
       >
         <PhaseTimingChart
           labels={phase.labels}
           values={phase.values}
           registry={registry}
           total={phase.total}
+          totalOnly={overlap}
           getZoom={getPhaseZoom}
           onZoom={onPhaseZoom}
           onHoverBlock={onHoverBlock}

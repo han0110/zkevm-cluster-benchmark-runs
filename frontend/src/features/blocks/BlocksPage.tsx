@@ -82,7 +82,7 @@ export function BlocksPage() {
           left={
             <BlocksTable
               model={model}
-              benchId={bench.id}
+              bench={bench}
               search={search}
               activeKey={activeKey}
               onVisibleRowsChange={onVisibleRowsChange}

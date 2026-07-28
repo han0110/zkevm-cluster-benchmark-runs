@@ -25,9 +25,9 @@ fn main() {
 
 /// Runs the parse-benchmark subcommand and reports the outcome.
 fn run_parse_benchmark(args: &ParseBenchmarkArgs) {
-    let output = &args.output;
+    let output = args.output_path();
     let verb = if args.patch { "patched" } else { "wrote" };
-    match parse_benchmark::run(&args.input, output, args.force, args.patch) {
+    match parse_benchmark::run(&args.input, &output, args.force, args.patch) {
         Ok(count) => eprintln!(
             "{verb} {} ({} runs, {count} blocks)",
             output.display(),

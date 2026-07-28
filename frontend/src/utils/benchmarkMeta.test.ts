@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { parseBenchmarkHead } from '@/utils/benchmarkMeta';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { zstdCompressSync } from 'node:zlib';
+import { loadBenchmarkMeta, parseBenchmarkHead } from '@/utils/benchmarkMeta';
 
 // A compact head shaped like a real document, truncated partway through the first run as a ranged read
 // returns it.
@@ -53,6 +54,67 @@ describe('parseBenchmarkHead', () => {
     expect(meta.name).toBe('pretty');
     expect(meta.description).toBe('whitespace formatted');
     expect(meta.software.zkvm.name).toBe('zisk');
+    expect(meta.startedAt).toBe(1748910235000);
+  });
+});
+
+// The byte count the reader requests, mirrored here so the truncation matches a real ranged read.
+const HEAD_BYTES = 1 << 18;
+
+const ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/';
+
+// Filler from a deterministic xorshift over a wide alphabet, compressing at a ratio near a real
+// document's rather than collapsing into back-references, which keeps the frame long enough for the head
+// to cut it partway.
+function filler(length: number): string {
+  let text = '';
+  let state = 2463534242;
+  for (let i = 0; i < length; i += 1) {
+    state ^= state << 13;
+    state >>>= 0;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    text += ALPHABET[state >>> 26];
+  }
+  return text;
+}
+
+// The body of one fetch, copied so the Response owns a standalone buffer.
+const body = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer;
+
+describe('loadBenchmarkMeta', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('decodes the metadata from a frame the ranged read cut partway', async () => {
+    const document = `${head()},"pad":"${filler(600_000)}"}]}`;
+    const frame = new Uint8Array(zstdCompressSync(Buffer.from(document)));
+    // A head carrying no end-of-frame marker is what the decoder has to survive, since the range stops
+    // wherever the byte count lands.
+    expect(frame.length).toBeGreaterThan(HEAD_BYTES);
+    const truncated = frame.subarray(0, HEAD_BYTES);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(body(truncated), { status: 206 }));
+
+    const meta = await loadBenchmarkMeta('/data/truncated.json.zstd');
+    expect(meta.id).toBe('eest-60m-20260603-002355');
+    expect(meta.name).toBe('eest-60m');
+    expect(meta.software.zkvm.name).toBe('zisk');
+    expect(meta.startedAt).toBe(1748910235000);
+    // One ranged read is what keeps the picker off the whole multi-megabyte document.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ headers: { Range: expect.stringMatching(/^bytes=0-/) } });
+  });
+
+  it('decodes a document whose whole frame fits inside the range', async () => {
+    const frame = new Uint8Array(zstdCompressSync(Buffer.from(`${head()}}]}`)));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body(frame), { status: 200 }));
+
+    const meta = await loadBenchmarkMeta('/data/whole.json.zstd');
+    expect(meta.id).toBe('eest-60m-20260603-002355');
     expect(meta.startedAt).toBe(1748910235000);
   });
 });

@@ -55,12 +55,16 @@ export function hasPipeline(bench: Benchmark, block: Block): boolean {
   );
 }
 
+// The trailing metadata object of a wire row, or undefined on a pure integer row.
+const rowMeta = (row: (number | PipelineRowMeta)[]): PipelineRowMeta | undefined => {
+  const last = row[row.length - 1];
+  return typeof last === 'object' && last !== null ? last : undefined;
+};
+
 // A wire row split into its numeric cells and its optional trailing metadata object.
 const splitRow = (row: (number | PipelineRowMeta)[]): { cells: number[]; meta?: PipelineRowMeta } => {
-  const last = row[row.length - 1];
-  return typeof last === 'object' && last !== null
-    ? { cells: row.slice(0, -1) as number[], meta: last }
-    : { cells: row as number[] };
+  const meta = rowMeta(row);
+  return meta ? { cells: row.slice(0, -1) as number[], meta } : { cells: row as number[] };
 };
 
 // A metadata field read as a finite number, undefined on any other shape.
@@ -71,6 +75,40 @@ const metaNumber = (value: unknown): number | undefined =>
 // clamp pre-scan and the item loop alike so one malformed row never skews the dangling clamp.
 const validRow = (row: number[]): boolean =>
   row.length >= 2 && row.length <= 5 && row.every(v => Number.isFinite(v));
+
+// Recursion proof counts by block, memoized because the blocks table sorts on the count and a block
+// carries thousands of wire rows. A block belongs to one benchmark, so its count never depends on which
+// document asks for it.
+const recursionCounts = new WeakMap<Block, number | null>();
+
+// How many recursion proofs a block's nodes ran, the leaf and internal proofs that fold its segments
+// down to one. A new-format document splits each proof into its STARK sub-step components, which share
+// a per-node group, so the proofs are the distinct groups. An old-format document carries one
+// monolithic row per proof and no group, so those rows count themselves. Null when the document's kind
+// template declares no recursion phase, as a zkVM without the phase does.
+export function recursionCount(bench: Benchmark, block: Block): number | null {
+  const cached = recursionCounts.get(block);
+  if (cached !== undefined) return cached;
+
+  const kinds = bench.software.zkvm.pipeline ?? [];
+  const recursionKinds = new Set(kinds.flatMap((kind, index) => (kind.phase === 'recursion' ? [index] : [])));
+  let count: number | null = null;
+  if (recursionKinds.size > 0) {
+    const groups = new Set<string>();
+    let monolithic = 0;
+    block.nodes.forEach((node, nodeIndex) => {
+      for (const row of node.pipeline ?? []) {
+        if (!recursionKinds.has(row[0] as number)) continue;
+        const group = metaNumber(rowMeta(row)?.group);
+        if (group == null) monolithic += 1;
+        else groups.add(`${nodeIndex}:${group}`);
+      }
+    });
+    count = groups.size + monolithic;
+  }
+  recursionCounts.set(block, count);
+  return count;
+}
 
 // Decodes a block's wire rows into the timeline model. A dangling segment's end clamps to its node's
 // crash moment when marked, else to the block's latest known end, and a malformed row (bad arity,

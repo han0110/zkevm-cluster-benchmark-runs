@@ -1,11 +1,11 @@
 /*
  * Builders for an openvm-shaped benchmark whose execution, segment, and recursion phases carry the
  * overlap flag, three consecutive overlap phases the zisk fixture cannot reach, for tests of the overlap
- * registry and the chain-band window math. Blocks are built per test because each case needs its own
- * precise phase windows.
+ * registry, the chain-band window math, and the per-block figures read off the segment and recursion
+ * proofs. Blocks are built per test because each case needs its own precise phase windows.
  */
 
-import type { Benchmark, Block, BlockNode, PhaseWindow, SubPhase } from '@/types/benchmark';
+import type { Benchmark, Block, BlockMeta, BlockNode, PipelineRowMeta, PhaseWindow, SubPhase } from '@/types/benchmark';
 import { fixture } from '@/test/fixture';
 
 // A phase window from start and duration in milliseconds.
@@ -20,16 +20,18 @@ export const openvmSubPhases: SubPhase[] = ['segment', 'recursion'].flatMap(phas
   SUB_STEP_NAMES.map(name => ({ name, label: name, phase }))
 );
 
-// A participating node holding the given per-phase windows.
-export const openvmNode = (phases: (PhaseWindow | null)[]): BlockNode => ({
+// A participating node holding the given per-phase windows, and the fine-pipeline rows a case that
+// reads them needs.
+export const openvmNode = (phases: (PhaseWindow | null)[], pipeline?: (number | PipelineRowMeta)[][]): BlockNode => ({
   phases,
+  ...(pipeline ? { pipeline } : {}),
   crashed_ms: null,
   crash_kind: null,
   participated: true,
 });
 
 // A successful block over the given nodes, proving for as long as its latest phase end.
-export const openvmBlock = (name: string, nodes: BlockNode[]): Block => ({
+export const openvmBlock = (name: string, nodes: BlockNode[], meta: BlockMeta = {}): Block => ({
   name,
   status: 'success',
   start_ms: 0,
@@ -37,7 +39,7 @@ export const openvmBlock = (name: string, nodes: BlockNode[]): Block => ({
   proving_ms: Math.max(0, ...nodes.flatMap(n => n.phases.flatMap(p => (p ? [p.start_ms + p.dur_ms] : [])))),
   proof_size: null,
   verification_time_ms: null,
-  meta: {},
+  meta,
   nodes,
 });
 

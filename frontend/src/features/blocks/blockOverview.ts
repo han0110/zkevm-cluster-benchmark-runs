@@ -3,8 +3,9 @@
  * drift. Each field renders a block to a display string and exposes a numeric sort value.
  */
 
-import type { Block } from '@/types/benchmark';
-import type { PhaseRegistry } from '@/utils/phases';
+import type { Benchmark, Block } from '@/types/benchmark';
+import { buildPhaseRegistry, type PhaseRegistry } from '@/utils/phases';
+import { recursionCount } from '@/utils/pipelineItems';
 import { dash, formatBytes, formatCompact, formatSeconds, msToSec } from '@/utils/format';
 
 export interface BlockField {
@@ -47,10 +48,14 @@ function emulationRange(block: Block, registry: PhaseRegistry): string {
   return lo === hi ? `${lo} MHz` : `${lo} - ${hi} MHz`;
 }
 
-// Proof overview metrics in display order. Proving time is keyed 'time' so the blocks table can promote
-// it to a leading column while the detail strip renders the list as-is.
-export function blockOverviewFields(): BlockField[] {
-  return [
+// Proof overview metrics in display order, the figures every zkVM reports followed by the ones only the
+// document's own zkVM carries. Proving time is keyed 'time' so the blocks table can promote it to a
+// leading column while the detail strip renders the list as-is. Each zkVM-specific group rides on the
+// phase whose semantics it describes, so a document declares its own columns rather than printing a
+// column of dashes for figures its zkVM never produces.
+export function blockOverviewFields(bench: Benchmark): BlockField[] {
+  const registry = buildPhaseRegistry(bench);
+  const shared: BlockField[] = [
     {
       key: 'time',
       label: 'Proving time',
@@ -65,8 +70,11 @@ export function blockOverviewFields(): BlockField[] {
       render: b => dash(b.verification_time_ms, ms => `${ms} ms`),
       sortValue: b => b.verification_time_ms,
     },
-    { key: 'steps', label: 'Steps', render: b => dash(b.meta.steps, formatCompact), sortValue: b => b.meta.steps ?? null },
     { key: 'input', label: 'Input', render: b => dash(b.meta.input_size, formatBytes), sortValue: b => b.meta.input_size ?? null },
+  ];
+  // Step count and emulation rate measure the emulation phase, so they belong to a preset that has one.
+  const emulated: BlockField[] = [
+    { key: 'steps', label: 'Steps', render: b => dash(b.meta.steps, formatCompact), sortValue: b => b.meta.steps ?? null },
     {
       key: 'emulation',
       label: 'Emulation',
@@ -78,5 +86,22 @@ export function blockOverviewFields(): BlockField[] {
         return rates.length ? Math.max(...rates) : null;
       },
     },
+  ];
+  // The segment and recursion proof counts stand in for the trace size, the segments the executor metered
+  // and the leaf and internal proofs that fold them down to one. Both print in full because a few
+  // thousand proofs read worse abbreviated.
+  const recursive: BlockField[] = [
+    { key: 'segments', label: 'Segments', render: b => dash(b.meta.segments, String), sortValue: b => b.meta.segments ?? null },
+    {
+      key: 'recursions',
+      label: 'Recursions',
+      render: b => dash(recursionCount(bench, b), String),
+      sortValue: b => recursionCount(bench, b),
+    },
+  ];
+  return [
+    ...shared,
+    ...(registry.byName('emulation') ? emulated : []),
+    ...(registry.byName('recursion') ? recursive : []),
   ];
 }

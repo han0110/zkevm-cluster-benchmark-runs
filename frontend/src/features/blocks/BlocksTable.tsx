@@ -14,35 +14,41 @@ import { Truncated } from '@/components/common/Truncated';
 import { cx } from '@/utils/cx';
 import { FOCUS_RING } from '@/utils/styles';
 import { blockLabel, type PhaseRegistry } from '@/utils/phases';
+import { hasOverlapPhases } from '@/utils/phaseTimings';
 import { phaseMixSegments, blockOverviewFields } from '@/features/blocks/blockOverview';
 import { statusColor, type BlockRow } from '@/features/blocks/blockFilters';
 import type { BlockTableModel } from '@/features/blocks/useBlockTableModel';
-import type { Block } from '@/types/benchmark';
+import type { Benchmark, Block } from '@/types/benchmark';
 
-// Proving time paired with a phase-mix bar. Fixed-width track and column align bars and figures down the
-// column. The bar scales against the slowest proof.
+// Proving time, paired with a phase-mix bar where the phases run in sequence. Fixed-width track and
+// column align bars and figures down the column. The bar scales against the slowest proof. A preset
+// whose phases overlap has no sequence to split, so its rows carry the figure alone.
 function ProvingTimeCell({
   block,
   registry,
   maxProvingMs,
   text,
+  phaseMix,
 }: {
   block: Block;
   registry: PhaseRegistry;
   maxProvingMs: number;
   text: string;
+  phaseMix: boolean;
 }) {
   const widthPct = maxProvingMs > 0 && block.proving_ms != null ? (block.proving_ms / maxProvingMs) * 100 : 100;
   return (
     <div className="flex items-center gap-3">
       <span className="w-16 shrink-0 text-right tabular-nums">{text}</span>
-      <div className="w-28 shrink-0">
-        {block.status === 'success' && (
-          <div style={{ width: `${widthPct}%` }}>
-            <ProportionBar segments={phaseMixSegments(block, registry)} />
-          </div>
-        )}
-      </div>
+      {phaseMix && (
+        <div className="w-28 shrink-0">
+          {block.status === 'success' && (
+            <div style={{ width: `${widthPct}%` }}>
+              <ProportionBar segments={phaseMixSegments(block, registry)} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -53,13 +59,13 @@ const rowKeyOf = (r: BlockRow): string => `${r.runIndex}/${r.block.name}`;
 
 export function BlocksTable({
   model,
-  benchId,
+  bench,
   search,
   activeKey,
   onVisibleRowsChange,
 }: {
   model: BlockTableModel;
-  benchId: string;
+  bench: Benchmark;
   search: string;
   activeKey?: string;
   // The rows in displayed order, reported up so the page steps arrow-key navigation through the
@@ -68,10 +74,12 @@ export function BlocksTable({
 }) {
   const { registry, rows, maxProvingMs } = model;
 
-  // Columns lead with id, proving time, status, then the shared overview fields, run index, and latest
-  // flag. Proving time keeps the shared sort value but renders the phase-mix bar.
+  // Columns lead with id, proving time, status, then the overview fields, run index, and latest flag.
+  // Proving time keeps the shared sort value but renders the phase-mix bar, which an overlap preset's
+  // concurrent phases cannot be split into.
   const columns = useMemo<DataColumn<BlockRow>[]>(() => {
-    const fields = blockOverviewFields();
+    const fields = blockOverviewFields(bench);
+    const phaseMix = !hasOverlapPhases(registry);
     const time = fields.find(f => f.key === 'time');
     const rest = fields.filter(f => f.key !== 'time');
     return [
@@ -99,7 +107,13 @@ export function BlocksTable({
               key: 'time',
               header: time.label,
               render: (r: BlockRow) => (
-                <ProvingTimeCell block={r.block} registry={registry} maxProvingMs={maxProvingMs} text={time.render(r.block, registry)} />
+                <ProvingTimeCell
+                  block={r.block}
+                  registry={registry}
+                  maxProvingMs={maxProvingMs}
+                  text={time.render(r.block, registry)}
+                  phaseMix={phaseMix}
+                />
               ),
               sortValue: (r: BlockRow) => time.sortValue(r.block, registry),
             },
@@ -125,7 +139,7 @@ export function BlocksTable({
         sortValue: r => (r.isLatest ? 1 : 0),
       },
     ];
-  }, [search, registry, maxProvingMs]);
+  }, [bench, search, registry, maxProvingMs]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -137,7 +151,7 @@ export function BlocksTable({
         onVisibleRowsChange={onVisibleRowsChange}
         initialSort={{ key: 'id', dir: 'asc' }}
         // Scope persisted widths per benchmark so a long-id benchmark keeps its wide id column.
-        tableId={`blocks:${benchId}`}
+        tableId={`blocks:${bench.id}`}
         className="min-h-0 flex-1 overflow-y-auto"
       />
     </div>

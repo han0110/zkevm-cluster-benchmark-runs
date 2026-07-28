@@ -138,11 +138,13 @@ export interface BlockNode {
   participated: boolean;
 }
 
-// zkVM-specific per-block metadata, for zisk the input size, instance count, and step count.
+// zkVM-specific per-block metadata, for zisk the input size, instance count, and step count, and for
+// openvm the input size and the count of app segments the executor metered.
 export interface BlockMeta {
   input_size?: number;
   instances?: number;
   steps?: number;
+  segments?: number;
 }
 
 // One cluster-log line within a block's proving window, role-tagged and at an offset from the block

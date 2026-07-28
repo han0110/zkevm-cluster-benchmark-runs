@@ -16,6 +16,14 @@ use crate::parse_benchmark::input::log::{
 /// The zisk backend.
 pub struct ZiskParser;
 
+/// Whether the fine pipeline reaches the document. Work in progress, held back because the worker's
+/// bracket markers time the coordinator's dispatch rather than the GPU execution they name, so the
+/// extracted spans do not describe the work they are labelled with. The coordinator, worker, and
+/// pipeline parsers stay in place and under test while that is settled. The template and the
+/// per-node items are withheld together, since a wire row addresses its kind by template index and
+/// one without the other would leave every row pointing at nothing.
+const EMIT_PIPELINE: bool = false;
+
 /// Returns the ordered zisk phase preset.
 pub fn zisk_phases() -> Vec<PhaseDef> {
     [
@@ -69,7 +77,7 @@ impl ZkvmParser for ZiskParser {
                     raw,
                     worker.agg.get(&key),
                     worker.stages.get(&key),
-                    worker.pipelines.get(&key),
+                    EMIT_PIPELINE.then(|| worker.pipelines.get(&key)).flatten(),
                 )
             })
             .collect();
@@ -77,7 +85,11 @@ impl ZkvmParser for ZiskParser {
         Ok(ParsedLogs {
             name: "zisk",
             phases: zisk_phases(),
-            pipeline: pipeline::zisk_pipeline(),
+            pipeline: if EMIT_PIPELINE {
+                pipeline::zisk_pipeline()
+            } else {
+                Vec::new()
+            },
             pipeline_components: Vec::new(),
             subphases: Vec::new(),
             logs,

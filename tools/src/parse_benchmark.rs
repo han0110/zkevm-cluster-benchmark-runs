@@ -40,6 +40,24 @@ pub struct ParseBenchmarkArgs {
     /// cluster.
     #[arg(long)]
     pub patch: bool,
+
+    /// Compress the document, appending a .zstd suffix to the output path. The frontend loads the
+    /// compressed document, the plain JSON serving only for debugging.
+    #[arg(long)]
+    pub zstd: bool,
+}
+
+impl ParseBenchmarkArgs {
+    /// The path the document is written to, the output path with a .zstd suffix when compressing.
+    /// The suffix is appended rather than replacing the .json one, so the file names the format it
+    /// decompresses to and the sibling log tree still resolves from the same parent.
+    pub fn output_path(&self) -> PathBuf {
+        if self.zstd {
+            self.output.with_added_extension("zstd")
+        } else {
+            self.output.clone()
+        }
+    }
 }
 
 /// Detects the zkVM, parses the logs, loads the run's sources, and assembles the document.
@@ -211,13 +229,31 @@ mod tests {
     };
 
     use crate::parse_benchmark::{
-        ParseError, merge_run,
+        ParseBenchmarkArgs, ParseError, merge_run,
         output::{
             Benchmark,
             schema::{PipelineStep, SubPhase},
         },
         parse_to_benchmark,
     };
+
+    /// The compression flag appends the suffix to the output path rather than replacing the .json
+    /// one, so the file names the format it decompresses to.
+    #[test]
+    fn the_compression_flag_appends_the_suffix_to_the_output_path() {
+        let args = |zstd| ParseBenchmarkArgs {
+            input: vec![PathBuf::from("run")],
+            output: PathBuf::from("data/bench.json"),
+            force: false,
+            patch: false,
+            zstd,
+        };
+        assert_eq!(args(false).output_path(), PathBuf::from("data/bench.json"));
+        assert_eq!(
+            args(true).output_path(),
+            PathBuf::from("data/bench.json.zstd")
+        );
+    }
 
     /// A one-entry sub-phase template naming the given sub-step under the segment owner.
     fn segment_template(name: &str) -> Vec<SubPhase> {
@@ -342,9 +378,16 @@ mod tests {
         // Two runs whose pipeline templates differ within the shared base prefix must not merge,
         // since the per-block kind indices of one run would point at the other's template. A pure
         // extension is the version difference the prefix reconciliation allows, so the conflict
-        // must sit in the prefix itself.
-        let mut existing = parse_to_benchmark(&timestamped_run("20260602-000003")).unwrap();
-        let mut incoming = parse_to_benchmark(&timestamped_run("20260602-000004")).unwrap();
+        // must sit in the prefix itself. Both runs are reshaped to the openvm base template because
+        // the fixture's own backend withholds its pipeline, leaving nothing to conflict over.
+        let mut existing = with_openvm_templates(
+            parse_to_benchmark(&timestamped_run("20260602-000003")).unwrap(),
+            false,
+        );
+        let mut incoming = with_openvm_templates(
+            parse_to_benchmark(&timestamped_run("20260602-000004")).unwrap(),
+            false,
+        );
         incoming.software.zkvm.pipeline[0].name = "different".to_string();
         let err = merge_run(&mut existing, incoming).unwrap_err();
         assert!(matches!(err, ParseError::PatchMismatch("pipeline")));
