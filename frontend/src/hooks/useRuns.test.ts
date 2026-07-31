@@ -19,7 +19,7 @@ describe('useRun', () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(buildFrame(fixture), { status: 200 }));
-    const { result } = renderHook(() => useRun({ id: fixture.id, url: '/data/bench.json.zstd' }));
+    const { result } = renderHook(() => useRun({ id: fixture.id, url: '/data/bench.json.zst' }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBeNull();
@@ -31,7 +31,7 @@ describe('useRun', () => {
 
   it('reports a failed response as an error rather than decoding its body', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 404, statusText: 'Not Found' }));
-    const { result } = renderHook(() => useRun({ id: 'missing', url: '/data/missing.json.zstd' }));
+    const { result } = renderHook(() => useRun({ id: 'missing', url: '/data/missing.json.zst' }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.data).toBeNull();

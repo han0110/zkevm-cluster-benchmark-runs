@@ -1,8 +1,8 @@
 /*
  * Data loading for runs. The run index resolves synchronously from the data directory glob (utils/
  * runIndex), and an individual run is fetched lazily by its served URL. Each document is one zstd
- * frame, decompressed here rather than by the transport, since the .json.zstd suffix keeps a static
- * host from declaring a Content-Encoding the browser would inflate transparently.
+ * frame, decompressed here rather than by the transport, so the host must serve the .json.zst body
+ * unencoded. A host that declares a zstd Content-Encoding inflates it before this reader sees it.
  */
 
 import { useEffect, useMemo, useState } from 'react';

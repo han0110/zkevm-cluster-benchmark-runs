@@ -1,6 +1,6 @@
 //! The output stage. The schema holds the benchmark.json structs, assemble builds the document, and
 //! this root serializes it to compact JSON on disk, framed with zstd when the path carries the
-//! .zstd suffix.
+//! .zst suffix.
 
 pub mod assemble;
 pub mod schema;
@@ -24,7 +24,7 @@ pub fn to_json(benchmark: &Benchmark) -> crate::parse_benchmark::Result<String> 
 /// Whether the path names a zstd-framed document, the suffix the --zstd flag appends. The framing
 /// is a property of the path alone, so a patch reads back whatever the same path was written as.
 fn compressed(path: &Path) -> bool {
-    path.extension().is_some_and(|ext| ext == "zstd")
+    path.extension().is_some_and(|ext| ext == "zst")
 }
 
 /// Reads the benchmark at the path, the existing document a patch appends a run to.

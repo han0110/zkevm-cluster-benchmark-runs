@@ -6,9 +6,9 @@ import { BenchmarkPicker } from '@/components/layout/BenchmarkPicker';
 // Three benchmarks with distinct times and distinct software labels, so every ordering has one answer
 // and no tie leaves an assertion resting on sort stability.
 const ROWS = vi.hoisted(() => [
-  { id: 'old-zisk', url: '/data/old-zisk.json.zstd', guest: 'reth@v2.1.0', zkvm: 'zisk@v0.18.0', startedAt: 1_000 },
-  { id: 'new-openvm', url: '/data/new-openvm.json.zstd', guest: 'ethrex@v15.0.0', zkvm: 'openvm@9a00000', startedAt: 3_000 },
-  { id: 'mid-openvm', url: '/data/mid-openvm.json.zstd', guest: 'reth@c5dff62', zkvm: 'openvm@8f86342', startedAt: 2_000 },
+  { id: 'old-zisk', url: '/data/old-zisk.json.zst', guest: 'reth@v2.1.0', zkvm: 'zisk@v0.18.0', startedAt: 1_000 },
+  { id: 'new-openvm', url: '/data/new-openvm.json.zst', guest: 'ethrex@v15.0.0', zkvm: 'openvm@9a00000', startedAt: 3_000 },
+  { id: 'mid-openvm', url: '/data/mid-openvm.json.zst', guest: 'reth@c5dff62', zkvm: 'openvm@8f86342', startedAt: 2_000 },
 ]);
 
 // The picker reads each entry's metadata head through loadBenchmarkMeta. The test stands in a resolved

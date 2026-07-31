@@ -1,6 +1,6 @@
 /*
  * Lightweight metadata reader for the benchmark picker, reading only the small leading head of a flat
- * data/{id}.json.zstd with a ranged request so listing never parses the multi-megabyte runs array. The
+ * data/{id}.json.zst with a ranged request so listing never parses the multi-megabyte runs array. The
  * head is a truncated zstd frame, decompressed by a streaming reader that stops where the range cut it
  * off.
  */

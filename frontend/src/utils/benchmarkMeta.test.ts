@@ -99,7 +99,7 @@ describe('loadBenchmarkMeta', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(body(truncated), { status: 206 }));
 
-    const meta = await loadBenchmarkMeta('/data/truncated.json.zstd');
+    const meta = await loadBenchmarkMeta('/data/truncated.json.zst');
     expect(meta.id).toBe('eest-60m-20260603-002355');
     expect(meta.name).toBe('eest-60m');
     expect(meta.software.zkvm.name).toBe('zisk');
@@ -113,7 +113,7 @@ describe('loadBenchmarkMeta', () => {
     const frame = new Uint8Array(zstdCompressSync(Buffer.from(`${head()}}]}`)));
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body(frame), { status: 200 }));
 
-    const meta = await loadBenchmarkMeta('/data/whole.json.zstd');
+    const meta = await loadBenchmarkMeta('/data/whole.json.zst');
     expect(meta.id).toBe('eest-60m-20260603-002355');
     expect(meta.startedAt).toBe(1748910235000);
   });

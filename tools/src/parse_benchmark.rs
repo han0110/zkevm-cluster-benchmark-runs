@@ -41,19 +41,19 @@ pub struct ParseBenchmarkArgs {
     #[arg(long)]
     pub patch: bool,
 
-    /// Compress the document, appending a .zstd suffix to the output path. The frontend loads the
+    /// Compress the document, appending a .zst suffix to the output path. The frontend loads the
     /// compressed document, the plain JSON serving only for debugging.
     #[arg(long)]
     pub zstd: bool,
 }
 
 impl ParseBenchmarkArgs {
-    /// The path the document is written to, the output path with a .zstd suffix when compressing.
+    /// The path the document is written to, the output path with a .zst suffix when compressing.
     /// The suffix is appended rather than replacing the .json one, so the file names the format it
     /// decompresses to and the sibling log tree still resolves from the same parent.
     pub fn output_path(&self) -> PathBuf {
         if self.zstd {
-            self.output.with_added_extension("zstd")
+            self.output.with_added_extension("zst")
         } else {
             self.output.clone()
         }
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(args(false).output_path(), PathBuf::from("data/bench.json"));
         assert_eq!(
             args(true).output_path(),
-            PathBuf::from("data/bench.json.zstd")
+            PathBuf::from("data/bench.json.zst")
         );
     }
 

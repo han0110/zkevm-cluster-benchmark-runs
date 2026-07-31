@@ -470,7 +470,7 @@ fn write_refuses_to_overwrite_without_force() {
     assert_eq!(doc.runs.len(), 1, "a forced overwrite is still one run");
 }
 
-/// A .json.zstd output is written as one zstd frame, reads back as the same document the plain path
+/// A .json.zst output is written as one zstd frame, reads back as the same document the plain path
 /// yields, keeps its per-block log tree beside it, and still patches.
 #[test]
 fn a_compressed_output_round_trips_and_patches() {
@@ -478,7 +478,7 @@ fn a_compressed_output_round_trips_and_patches() {
     // rather than a file the plain run happened to leave at the same path.
     let plain = tempdir().join("benchmark.json");
     let dir = tempdir();
-    let framed = dir.join("benchmark.json.zstd");
+    let framed = dir.join("benchmark.json.zst");
 
     parse_benchmark::run(&[fixture_dir()], &plain, false, false).expect("the plain write succeeds");
     parse_benchmark::run(&[fixture_dir()], &framed, false, false)
