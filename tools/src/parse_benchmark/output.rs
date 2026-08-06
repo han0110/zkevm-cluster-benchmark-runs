@@ -80,14 +80,6 @@ pub fn write_block_logs(
             created = true;
         }
         let path = dir.join(format!("{}.tar.json", archive_stem(&block.name)));
-        // The stem is a flat file name, so its parent is normally the run directory. This guards
-        // the unlikely case of a block name carrying a raw path separator, ensuring that
-        // parent rather than failing the write.
-        if let Some(parent) = path.parent()
-            && parent != dir
-        {
-            std::fs::create_dir_all(parent).map_err(io_at(parent))?;
-        }
         let json = serde_json::to_string(&block.logs).map_err(json_at(&path))?;
         write_log_archive(&path, &json)?;
     }
@@ -95,16 +87,17 @@ pub fn write_block_logs(
 }
 
 /// Maps a block name to its flat archive file stem, replacing the `::` of an EEST test id with a
-/// double underscore so every block's archive sits directly under log/{bench_id}/{run_id}/ as a
-/// single file rather than nesting under a per-test-file subdirectory. The colon is replaced rather
-/// than left in place because a colon in a served path is not matched by the dev server or a static
-/// origin, which fall through to the SPA HTML fallback; brackets and spaces serve fine
+/// double underscore and the `/` of its fixture path with a single underscore so every block's
+/// archive sits directly under log/{bench_id}/{run_id}/ as a single file rather than nesting under
+/// the fixture path's directories. The colon is replaced rather than left in place because a colon
+/// in a served path is not matched by the dev server or a static origin, which fall through to the
+/// SPA HTML fallback. The slash is replaced because the frontend looks the archive up under one
+/// percent-encoded path segment, which a nested tree never matches; brackets and spaces serve fine
 /// percent-encoded. This mapping must stay in sync with blockArchivePath in
-/// frontend/src/utils/archivePath.ts and the per-segment scan in the logArchiveIndex Vite plugin
-/// (frontend/vite/logArchiveIndex.ts), which replace the same `::` so all three address the same
+/// frontend/src/utils/archivePath.ts, which applies the same replacements so both address the same
 /// file.
 fn archive_stem(name: &str) -> String {
-    name.replace("::", "__")
+    name.replace("::", "__").replace('/', "_")
 }
 
 /// Writes the block's log JSON as a single-member gzipped tar at the path. The member is named
@@ -148,5 +141,22 @@ mod tests {
         );
         assert!(stem.contains('['), "the bracketed parameters are preserved");
         assert!(stem.contains(']'), "the bracketed parameters are preserved");
+    }
+
+    #[test]
+    fn archive_stem_flattens_a_path_carrying_eest_id() {
+        // An EEST v0.6.2 test id carries the fixture path before the file name, and the stem
+        // replaces the path's separators with single underscores so the archive is one flat file
+        // under the run directory.
+        let name = "tests/benchmark/compute/instruction/test_stack.py::test_swap[fork_Amsterdam-blockchain_test-opcode_SWAP15-benchmark-gas-value_60M]";
+        let stem = archive_stem(name);
+        assert_eq!(
+            stem,
+            "tests_benchmark_compute_instruction_test_stack.py__test_swap[fork_Amsterdam-blockchain_test-opcode_SWAP15-benchmark-gas-value_60M]"
+        );
+        assert!(
+            !stem.contains('/'),
+            "the stem stays a single flat file name"
+        );
     }
 }
