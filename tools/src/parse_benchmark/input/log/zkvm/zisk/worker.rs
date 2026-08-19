@@ -270,8 +270,8 @@ pub(crate) fn is_restart_banner(line: &str) -> bool {
 }
 
 /// Whether a worker INFO body opens the planning bracket that starts witness generation, which zisk
-/// 1.1.0 renamed from PLAN to PLAN_SECONDARY. The match is exact so a longer stem sharing the prefix
-/// is never mistaken for it.
+/// 1.1.0 renamed from PLAN to PLAN_SECONDARY. The match is exact so a longer stem sharing the
+/// prefix is never mistaken for it.
 fn is_plan_open(body: &str) -> bool {
     matches!(body.trim_end(), ">>> PLAN" | ">>> PLAN_SECONDARY")
 }

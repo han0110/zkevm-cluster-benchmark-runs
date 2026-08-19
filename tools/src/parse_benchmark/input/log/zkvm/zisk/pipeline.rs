@@ -21,8 +21,8 @@ use crate::parse_benchmark::input::log::{
 };
 
 /// A marker stem as printed after the bracket arrows, with whether an underscore and instance
-/// digits follow it in the log. A stem a zisk version renamed carries the other spelling in `alias`,
-/// so one kinds row covers both and `text` stays the canonical pairing key.
+/// digits follow it in the log. A stem a zisk version renamed carries the other spelling in
+/// `alias`, so one kinds row covers both and `text` stays the canonical pairing key.
 struct Stem {
     text: &'static str,
     alias: Option<&'static str>,
