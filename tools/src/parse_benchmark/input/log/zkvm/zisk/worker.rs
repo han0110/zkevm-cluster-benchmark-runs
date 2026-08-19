@@ -221,7 +221,7 @@ fn parse_stages(
                 let ts = Ts::parse(leading_ts(line))?;
                 set(stages, &key, node, ts, |s| &mut s.emulation_end);
             }
-        } else if body.trim_end() == ">>> PLAN" {
+        } else if is_plan_open(body) {
             if let Some(key) = cur_p1.clone() {
                 let ts = Ts::parse(leading_ts(line))?;
                 set(stages, &key, node, ts, |s| &mut s.witgen_start);
@@ -267,6 +267,13 @@ pub(crate) fn is_restart_banner(line: &str) -> bool {
     line.starts_with("ZisK Worker")
         || line.starts_with("Primary job")
         || line.contains("exited on signal")
+}
+
+/// Whether a worker INFO body opens the planning bracket that starts witness generation, which zisk
+/// 1.1.0 renamed from PLAN to PLAN_SECONDARY. The match is exact so a longer stem sharing the prefix
+/// is never mistaken for it.
+fn is_plan_open(body: &str) -> bool {
+    matches!(body.trim_end(), ">>> PLAN" | ">>> PLAN_SECONDARY")
 }
 
 /// The job uuid of a worker cancellation line, "Job <uuid> cancelled: <reason>", or None for any
@@ -402,6 +409,45 @@ mod tests {
             next.contribution_start.map(Ts::epoch_ms),
             Some(Ts::parse("2026-06-02T06:36:45.200000Z").unwrap().epoch_ms())
         );
+    }
+
+    // The v1.1.0 phase-1 markers, whose planning bracket is PLAN_SECONDARY and whose emulation
+    // bracket now encloses the contribution work zisk streams alongside the assembly execution.
+    const STAGE_LOG_V1_1: &str = "\
+2026-08-18T14:26:02.174498Z zisk_worker::worker_node INFO: Starting Partial Contribution for 18689344-7792-4e26-a958-212cc6dccc84
+2026-08-18T14:26:02.264677Z executor::executor INFO: >>> COMPUTE_MINIMAL_TRACE
+2026-08-18T14:26:02.512151Z executor::executor INFO: First GPU contribution queued
+2026-08-18T14:26:02.629278Z executor::executor INFO: <<< COMPUTE_MINIMAL_TRACE (364ms)
+2026-08-18T14:26:02.629293Z executor::executor INFO: >>> PLAN_SECONDARY
+2026-08-18T14:26:03.607868Z zisk_worker::worker INFO: Contribution computation successful for JobId(18689344\u{2026})
+2026-08-18T14:26:03.640000Z zisk_worker::worker_node INFO: Starting Prove for JobId(18689344\u{2026})
+2026-08-18T14:26:05.274000Z proofman::proofman INFO: <<< GENERATING_PROOFS (1634ms)
+";
+
+    #[test]
+    fn the_renamed_planning_marker_starts_witness_generation() {
+        // zisk 1.1.0 renamed the planning bracket from PLAN to PLAN_SECONDARY without moving it, so
+        // witness generation still runs from that bracket to the contribution success line.
+        let mut stages = BTreeMap::new();
+        parse_stages(STAGE_LOG_V1_1, "node1", &mut stages).unwrap();
+        let s = stages
+            .get("18689344")
+            .and_then(|j| j.get("node1"))
+            .expect("node1 stages");
+        assert_eq!(
+            s.witgen_start.map(Ts::epoch_ms),
+            Some(Ts::parse("2026-08-18T14:26:02.629293Z").unwrap().epoch_ms())
+        );
+        assert_eq!(
+            s.witgen_end.map(Ts::epoch_ms),
+            Some(Ts::parse("2026-08-18T14:26:03.607868Z").unwrap().epoch_ms())
+        );
+        // Emulation still ends where witness generation begins, so the two windows stay adjacent.
+        assert_eq!(
+            s.emulation_end.map(Ts::epoch_ms),
+            s.witgen_start.map(Ts::epoch_ms)
+        );
+        assert!(s.prove_start.is_some() && s.prove_end.is_some());
     }
 
     // A node that froze mid-contribution, modeled on the eest run0 crash. The last timestamped line

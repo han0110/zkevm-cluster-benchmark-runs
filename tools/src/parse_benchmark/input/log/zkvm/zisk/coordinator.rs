@@ -77,10 +77,11 @@ static RE_P2_DONE: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
-/// Matches the phase3 aggregator assignment line.
+/// Matches the phase3 aggregator assignment line. zisk 1.1.0 renamed the assigned role from
+/// aggregator to recurser, so both spellings name the same node.
 static RE_P3_ASSIGN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"^(?P<ts>\S+) INFO: \[Phase3\] Assigned worker WorkerId\((?P<worker>[^)]*)\) as aggregator for job JobId\((?P<job>[^)]*)\)",
+        r"^(?P<ts>\S+) INFO: \[Phase3\] Assigned worker WorkerId\((?P<worker>[^)]*)\) as (?:aggregator|recurser) for job JobId\((?P<job>[^)]*)\)",
     )
     .unwrap()
 });
@@ -445,6 +446,17 @@ mod tests {
         );
         assert_eq!(j.p2.len(), 1);
         assert_eq!(j.p2[0], "node3");
+    }
+
+    #[test]
+    fn phase3_assignment_accepts_the_recurser_spelling() {
+        // zisk 1.1.0 renamed the assigned phase-3 role from aggregator to recurser, so the newer
+        // spelling must still name the node that carries the job's aggregate window.
+        let j = one_job(
+            "2026-08-18T14:26:01.618211Z INFO: [Phase3] Assigned worker WorkerId(node1) as recurser for job JobId(JOBA)",
+        );
+        assert_eq!(j.aggregator.as_deref(), Some("node1"));
+        assert!(j.t_p3_start.is_some());
     }
 
     #[test]

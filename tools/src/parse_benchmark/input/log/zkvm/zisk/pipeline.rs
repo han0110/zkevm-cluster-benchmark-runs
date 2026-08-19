@@ -21,10 +21,19 @@ use crate::parse_benchmark::input::log::{
 };
 
 /// A marker stem as printed after the bracket arrows, with whether an underscore and instance
-/// digits follow it in the log.
+/// digits follow it in the log. A stem a zisk version renamed carries the other spelling in `alias`,
+/// so one kinds row covers both and `text` stays the canonical pairing key.
 struct Stem {
     text: &'static str,
+    alias: Option<&'static str>,
     numbered: bool,
+}
+
+impl Stem {
+    /// Whether a marker token names this stem under either spelling.
+    fn names(&self, text: &str) -> bool {
+        self.text == text || self.alias == Some(text)
+    }
 }
 
 /// How a paired kind's compute open claims a completed witness interval.
@@ -56,7 +65,20 @@ struct Kind {
 
 /// Builds a stem, keeping each kinds row below to a single readable line.
 const fn stem(text: &'static str, numbered: bool) -> Stem {
-    Stem { text, numbered }
+    Stem {
+        text,
+        alias: None,
+        numbered,
+    }
+}
+
+/// Builds a stem a zisk version rename spells two ways, the canonical spelling first.
+const fn renamed(text: &'static str, alias: &'static str, numbered: bool) -> Stem {
+    Stem {
+        text,
+        alias: Some(alias),
+        numbered,
+    }
 }
 
 /// Builds an unpaired kind whose sole bracket is its compute stem.
@@ -106,7 +128,12 @@ static KINDS: [Kind; 13] = [
         "emulation",
         stem("COMPUTE_MINIMAL_TRACE", false),
     ),
-    single("plan", "Plan", "commit", stem("PLAN", false)),
+    single(
+        "plan",
+        "Plan",
+        "commit",
+        renamed("PLAN", "PLAN_SECONDARY", false),
+    ),
     paired(
         "wc_contribution",
         "Witness + Contribution",
@@ -238,7 +265,7 @@ fn classify(token: &str, proof_side: bool) -> Option<Hit<'_>> {
 fn lookup<'a>(text: &str, numbered: bool, x: Option<&'a str>, proof_side: bool) -> Option<Hit<'a>> {
     let mut found: Option<Hit<'a>> = None;
     for (kind, k) in KINDS.iter().enumerate() {
-        if k.compute.numbered == numbered && k.compute.text == text {
+        if k.compute.numbered == numbered && k.compute.names(text) {
             return Some(Hit {
                 kind,
                 side: Side::Compute,
@@ -248,7 +275,7 @@ fn lookup<'a>(text: &str, numbered: bool, x: Option<&'a str>, proof_side: bool) 
         }
         if let Some(w) = &k.witness
             && w.stem.numbered == numbered
-            && w.stem.text == text
+            && w.stem.names(text)
             && (found.is_none() || proof_side)
         {
             found = Some(Hit {
@@ -1011,6 +1038,27 @@ ZisK Worker v0.18.0
             (
                 ms("2026-06-02T06:37:06.000Z"),
                 Some(ms("2026-06-02T06:37:06.200Z"))
+            )
+        );
+    }
+
+    // The v1.1.0 spelling of the planning bracket, which zisk renamed from PLAN to PLAN_SECONDARY.
+    const RENAMED_PLAN_LOG: &str = "\
+2026-08-18T14:26:02.174498Z zisk_worker::worker_node INFO: Starting Partial Contribution for aaaa1111-0000-0000-0000-000000000000
+2026-08-18T14:26:02.629293Z executor::executor INFO: >>> PLAN_SECONDARY
+2026-08-18T14:26:02.630474Z executor::executor INFO: <<< PLAN_SECONDARY (1ms)
+";
+
+    #[test]
+    fn a_renamed_stem_produces_its_own_kind() {
+        let items = parse_job(RENAMED_PLAN_LOG, "aaaa1111");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, 1);
+        assert_eq!(
+            items[0].first,
+            (
+                ms("2026-08-18T14:26:02.629293Z"),
+                Some(ms("2026-08-18T14:26:02.630474Z"))
             )
         );
     }
